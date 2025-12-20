@@ -1,0 +1,56 @@
+{
+  "ENVIRONMENT": "web,worker",
+  "MODULARIZE": "1",
+  "EXPORT_ES6": "1",
+
+  "ALLOW_MEMORY_GROWTH": "1",
+  "INITIAL_MEMORY": "33554432",
+  "STACK_SIZE": "131072",
+  "ABORTING_MALLOC": "1",
+  "MALLOC": "emmalloc",
+  "ASSERTIONS": "0",
+  "FILESYSTEM": "0",
+  "DYNAMIC_EXECUTION": "0",
+  "STRICT": "1",
+
+  "WASM_ASYNC_COMPILATION": "0",
+  "SINGLE_FILE": "1",
+
+  "EXPORTED_FUNCTIONS": [
+    "_setBuffers",
+    "_blockSamples",
+    "_intervalSamples",
+    "_inputLatency",
+    "_outputLatency",
+    "_reset",
+    "_presetDefault",
+    "_presetCheaper",
+    "_configure",
+    "_setTransposeSemitones",
+    "_setTransposeFactor",
+    "_setFormantSemitones",
+    "_setFormantFactor",
+    "_setFormantBase",
+    "_seek",
+    "_process",
+    "_flush"
+  ],
+  "EXPORTED_RUNTIME_METHODS": ["HEAPF32"],
+  "CFLAGS": [
+    "-O3",
+    "-std=c++17",
+    "-msimd128",
+    "-ffast-math",
+    "-fno-math-errno",
+    "-fno-exceptions",
+    "-fno-rtti"
+  ],
+  "LDFLAGS": ["-O3", "-flto=full", "--closure", "1"],
+  "PRE_JS": [],
+  "include": [
+    "../../signalsmith-stretch/include",
+    "../../signalsmith-stretch",
+    "../../signalsmith-linear/include",
+    "../../signalsmith-linear"
+  ]
+}

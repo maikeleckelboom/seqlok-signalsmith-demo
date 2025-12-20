@@ -1,0 +1,30 @@
+# Default: treat files as text and normalize to LF in the repo
+* text=auto eol=lf
+
+# Common text types (explicit, for clarity)
+*.ts   text eol=lf
+*.tsx  text eol=lf
+*.js   text eol=lf
+*.mjs  text eol=lf
+*.cjs  text eol=lf
+*.vue  text eol=lf
+*.css  text eol=lf
+*.html text eol=lf
+*.md   text eol=lf
+*.json text eol=lf
+*.yml  text eol=lf
+*.yaml text eol=lf
+*.sh   text eol=lf
+
+# Windows scripts (only if you have them)
+*.bat  text eol=crlf
+*.ps1  text eol=crlf
+
+# Binary files: never line-ending convert
+*.wasm binary
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.webp binary
+*.ico  binary

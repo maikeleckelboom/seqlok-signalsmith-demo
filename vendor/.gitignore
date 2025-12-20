@@ -1,0 +1,10 @@
+# build outputs
+dist/
+.cache/
+*.log
+
+# keep vendored libs / licenses
+!signalsmith-stretch/**
+!signalsmith-linear/**
+!third_party/licenses/**
+!THIRD_PARTY_NOTICES.md
