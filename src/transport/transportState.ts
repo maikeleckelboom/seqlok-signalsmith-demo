@@ -1,4 +1,10 @@
-export type TransportPhase = "idle" | "priming" | "running" | "paused";
+export type TransportPhase =
+  | "idle"
+  | "priming"
+  | "running"
+  | "paused"
+  | "drainingInput"
+  | "flushingTail";
 
 export interface TransportState {
   phase: TransportPhase;
@@ -9,6 +15,11 @@ export interface TransportState {
   pendingSeekFrame: number | null;
   pendingPlay: boolean;
   pendingPause: boolean;
+
+  /** Remaining silence-backed input frames to feed after EOF. */
+  endingDrainFramesRemaining: number;
+  /** Remaining output frames to flush after drain. */
+  endingFlushFramesRemaining: number;
 }
 
 export function createTransportState(): TransportState {
@@ -21,5 +32,7 @@ export function createTransportState(): TransportState {
     pendingSeekFrame: null,
     pendingPlay: false,
     pendingPause: false,
+    endingDrainFramesRemaining: 0,
+    endingFlushFramesRemaining: 0,
   };
 }

@@ -57,11 +57,12 @@ const pitchSemitones = ref(baseParams.pitchSemitones);
 const seekPosition = ref(0); // 0..1 across the whole track
 const currentPreset = ref<"default" | "cheaper">(structuralBase.preset);
 
-// Telemetry from worklet
-const timelineFrame = ref(0);
-const slotPhase = ref<string>("idle");
-const mixProgress = ref(0);
-const lastBlockRms = ref(0);
+  // Telemetry from worklet
+  const timelineFrame = ref(0);
+  const slotPhase = ref<string>("idle");
+  const transportPhase = ref<string>("idle");
+  const mixProgress = ref(0);
+  const lastBlockRms = ref(0);
 
 // Derived value
 const timelineSeconds = computed(() => {
@@ -128,6 +129,7 @@ function attachTelemetry(node: StretchLaneNode): void {
     readonly slotPhase: string;
     readonly mixTo: number;
     readonly blockRms: number;
+    readonly transportPhase: string;
   }
 
   node.port.onmessage = (event: MessageEvent<TelemetryMessage>): void => {
@@ -137,6 +139,7 @@ function attachTelemetry(node: StretchLaneNode): void {
     }
     timelineFrame.value = msg.timelineFrame;
     slotPhase.value = msg.slotPhase;
+    transportPhase.value = msg.transportPhase;
     mixProgress.value = Math.min(1, Math.max(0, msg.mixTo));
     lastBlockRms.value = msg.blockRms;
   };
@@ -430,6 +433,10 @@ onBeforeUnmount(() => {
       <div class="flex justify-between mb-1">
         <span class="text-slate-400">slot phase</span>
         <span>{{ slotPhase }}</span>
+      </div>
+      <div class="flex justify-between mb-1">
+        <span class="text-slate-400">transport phase</span>
+        <span>{{ transportPhase }}</span>
       </div>
       <div class="flex justify-between mb-1">
         <span class="text-slate-400">mix progress</span>

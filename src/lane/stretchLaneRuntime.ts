@@ -47,6 +47,11 @@ export interface StretchLaneRuntime {
   readonly composite: StretchLaneComposite;
 
   /**
+   * Current transport phase (idle, running, drainingInput, flushingTail, etc.).
+   */
+  readonly transportPhase: string;
+
+  /**
    * Drive one audio block through:
    *   mailbox → timeline → hotswap → engines → crossfade → pushOutput
    *
@@ -157,6 +162,8 @@ export function createStretchLaneRuntime(
     transport.pendingPlay = false;
     transport.pendingPause = false;
     transport.pendingSeekFrame = null;
+    transport.endingDrainFramesRemaining = 0;
+    transport.endingFlushFramesRemaining = 0;
     composite.resetTransport(transport.playbackRate);
   }
 
@@ -215,21 +222,32 @@ export function createStretchLaneRuntime(
   }
 
   function processBlock(outputFrames: number): void {
-    // Apply pending pause immediately
-    if (transport.pendingPause) {
+    // Apply pending pause immediately, but never abort an ending tail.
+    if (
+      transport.pendingPause &&
+      transport.phase !== "drainingInput" &&
+      transport.phase !== "flushingTail"
+    ) {
       transport.phase = "paused";
       transport.pendingPause = false;
       transport.pendingPlay = false;
     }
 
-    // Transition to priming if play or seek is requested
+    // Transition to priming if play or seek is requested.
+    // Seek aborts an in-progress ending so the user can jump elsewhere.
     const shouldPrime =
       transport.pendingPlay ||
-      (transport.pendingSeekFrame !== null && transport.phase === "running");
+      (transport.pendingSeekFrame !== null &&
+        (transport.phase === "running" ||
+          transport.phase === "paused" ||
+          transport.phase === "drainingInput" ||
+          transport.phase === "flushingTail"));
 
     if (shouldPrime && reader.asset !== null) {
       transport.phase = "priming";
       transport.pendingPlay = false;
+      transport.endingDrainFramesRemaining = 0;
+      transport.endingFlushFramesRemaining = 0;
     }
 
     // Execute priming
@@ -237,44 +255,95 @@ export function createStretchLaneRuntime(
       performPreRoll();
     }
 
-    // Drive the lane / composite
-    if (transport.phase === "running") {
-      lane.processBlock(outputFrames, {
-        renderWithDecision: (segmentOutputFrames, decision) => {
-          const inputFrames = debtAccumulator.accumulate(
-            segmentOutputFrames,
-            transport.playbackRate,
-          );
+    // Drive the lane / composite with phase-dispatching per-segment callback.
+    lane.processBlock(outputFrames, {
+      renderWithDecision: (segmentOutputFrames, decision) => {
+        switch (transport.phase) {
+          case "running": {
+            const inputFrames = debtAccumulator.accumulate(
+              segmentOutputFrames,
+              transport.playbackRate,
+            );
 
-          ensureCanonicalInputCapacity(inputFrames);
+            ensureCanonicalInputCapacity(inputFrames);
 
-          // Read canonical input segment from source asset
-          reader.readSegment(
-            canonicalInput,
-            transport.sourceFrameCursor,
-            inputFrames,
-          );
+            reader.readSegment(
+              canonicalInput,
+              transport.sourceFrameCursor,
+              inputFrames,
+            );
 
-          // Advance cursor
-          transport.sourceFrameCursor += inputFrames;
+            transport.sourceFrameCursor += inputFrames;
 
-          // Render through composite (both engines see identical input)
-          composite.renderSegment(
-            segmentOutputFrames,
-            decision,
-            canonicalInput,
-            inputFrames,
-          );
-        },
-      });
-    } else {
-      // Idle / paused: output silence, but still advance timeline
-      lane.processBlock(outputFrames, {
-        renderWithDecision: (segmentOutputFrames, _decision) => {
-          composite.pushSilence(segmentOutputFrames);
-        },
-      });
-    }
+            composite.renderSegment(
+              segmentOutputFrames,
+              decision,
+              canonicalInput,
+              inputFrames,
+            );
+
+            const asset = reader.asset;
+            if (
+              asset !== null &&
+              transport.sourceFrameCursor >= asset.totalFrames
+            ) {
+              transport.phase = "drainingInput";
+              transport.endingDrainFramesRemaining =
+                composite.getMaxActiveInputLatency();
+            }
+            break;
+          }
+
+          case "drainingInput": {
+            const inputFrames = debtAccumulator.accumulate(
+              segmentOutputFrames,
+              transport.playbackRate,
+            );
+
+            ensureCanonicalInputCapacity(inputFrames);
+
+            for (let c = 0; c < structural.channels; c += 1) {
+              canonicalInput[c]?.fill(0, 0, inputFrames);
+            }
+
+            composite.renderSegment(
+              segmentOutputFrames,
+              decision,
+              canonicalInput,
+              inputFrames,
+            );
+
+            transport.endingDrainFramesRemaining -= inputFrames;
+            if (transport.endingDrainFramesRemaining <= 0) {
+              transport.phase = "flushingTail";
+              transport.endingFlushFramesRemaining =
+                composite.getMaxActiveOutputLatency();
+            }
+            break;
+          }
+
+          case "flushingTail": {
+            composite.flushSegment(segmentOutputFrames, decision);
+
+            transport.endingFlushFramesRemaining -= segmentOutputFrames;
+            if (transport.endingFlushFramesRemaining <= 0) {
+              transport.phase = "idle";
+              transport.endingDrainFramesRemaining = 0;
+              transport.endingFlushFramesRemaining = 0;
+              debtAccumulator.reset();
+            }
+            break;
+          }
+
+          case "idle":
+          case "paused":
+          case "priming":
+          default:
+            composite.pushSilence(segmentOutputFrames);
+            break;
+        }
+      },
+    });
   }
 
   async function reconfigureStructurally(
@@ -292,6 +361,9 @@ export function createStretchLaneRuntime(
   return {
     lane,
     composite,
+    get transportPhase() {
+      return transport.phase;
+    },
     processBlock,
     updateParams,
     loadAsset,

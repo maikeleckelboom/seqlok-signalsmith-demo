@@ -12,6 +12,24 @@ computes fixed-output / variable-input frame economics, maintains the single
 source frame cursor, and performs explicit pre-roll before steady-state
 rendering.
 
+For fixed-length source assets, the runtime implements a deterministic
+end-of-input lifecycle:
+
+1. **EOF detection** — once the source cursor reaches the asset length, the
+   runtime does not cut off abruptly.
+2. **Input-latency drain** — the active engine(s) continue receiving
+   silence-backed input for their `inputLatency()` window, allowing analysis
+   windows to empty naturally.
+3. **Output tail flush** — after drain completes, `_flush(outputSamples)` is
+   called explicitly through the engine adapter to synthesize the remaining
+   output latency tail.
+4. **Deterministic idle transition** — when flush is exhausted, the runtime
+   returns to `idle` cleanly, preserving timeline sanity and hotswap invariants.
+
+This lifecycle is respected even during active hotswap crossfades: both engines
+receive identical silence input during drain and both are flushed, so the
+fade-out tail remains continuous.
+
 This repo is meant to be "show, don't tell" for:
 - RT-safe hotswapping (reject-while-busy, no overlapping swaps)
 - segment-correct rendering (respecting offsets inside an audio block)

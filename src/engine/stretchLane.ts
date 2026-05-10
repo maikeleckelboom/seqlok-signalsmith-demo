@@ -200,6 +200,28 @@ export class StretchLaneComposite {
     );
   }
 
+  getMaxActiveInputLatency(): number {
+    let max = 0;
+    for (const engine of [
+      this.bank.get(EngineKind.A),
+      this.bank.get(EngineKind.B),
+    ]) {
+      if (engine) max = Math.max(max, engine.inputLatencyFrames);
+    }
+    return max;
+  }
+
+  getMaxActiveOutputLatency(): number {
+    let max = 0;
+    for (const engine of [
+      this.bank.get(EngineKind.A),
+      this.bank.get(EngineKind.B),
+    ]) {
+      if (engine) max = Math.max(max, engine.outputLatencyFrames);
+    }
+    return max;
+  }
+
   updateParams(next: StretchParams): void {
     this.liveParams = next;
   }
@@ -319,12 +341,7 @@ export class StretchLaneComposite {
     );
   }
 
-  renderSegment(
-    outputFrames: number,
-    decision: SwapStepDecisionRT<EngineKindType>,
-    canonicalInput: Float32Array[],
-    inputFrames: number,
-  ): void {
+  private updateTelemetry(decision: SwapStepDecisionRT<EngineKindType>): void {
     this.telemetryPhase = decision.status.phase;
     this.currentActiveKind = decision.status.activeEngineKind;
 
@@ -345,11 +362,23 @@ export class StretchLaneComposite {
     if (decision.status.phase === "idle") {
       this.swapParams = null;
     }
+  }
 
-    const params =
-      this.swapParams !== null && decision.status.phase !== "idle"
-        ? this.swapParams
-        : this.liveParams;
+  private selectParams(decision: SwapStepDecisionRT<EngineKindType>): StretchParams {
+    return this.swapParams !== null && decision.status.phase !== "idle"
+      ? this.swapParams
+      : this.liveParams;
+  }
+
+  renderSegment(
+    outputFrames: number,
+    decision: SwapStepDecisionRT<EngineKindType>,
+    canonicalInput: Float32Array[],
+    inputFrames: number,
+  ): void {
+    this.updateTelemetry(decision);
+
+    const params = this.selectParams(decision);
 
     const active: StretchEngine | null = this.bank.get(
       decision.status.activeEngineKind,
@@ -372,6 +401,78 @@ export class StretchLaneComposite {
 
     if (runNext && next !== null) {
       next.render(this.outB, canonicalInput, inputFrames, outputFrames, params);
+    } else {
+      for (let c = 0; c < this.channels; c += 1)
+        this.outB[c]?.fill(0, 0, outputFrames);
+    }
+
+    // 2) ALC alignment
+    const latA = active?.totalLatencyFrames ?? 0;
+    const latB = next?.totalLatencyFrames ?? 0;
+
+    const padA = Math.max(0, this.laneDelayFrames - latA);
+    const padB = Math.max(0, this.laneDelayFrames - latB);
+
+    for (let c = 0; c < this.channels; c += 1) {
+      this.delayA[c]!.process(this.outA[c]!, this.alignedA[c]!, outputFrames, padA);
+      this.delayB[c]!.process(this.outB[c]!, this.alignedB[c]!, outputFrames, padB);
+    }
+
+    // 3) Mix/output
+    if (
+      decision.kind === "runBothForCrossfade" &&
+      next !== null &&
+      decision.status.fadeTotalFrames > 0
+    ) {
+      const total = decision.status.fadeTotalFrames;
+      const done0 = decision.status.fadeDoneFramesAtBlockStart;
+
+      for (let c = 0; c < this.channels; c += 1) {
+        const aBuf = this.alignedA[c]!;
+        const bBuf = this.alignedB[c]!;
+        const dst = this.mixOut[c]!;
+
+        for (let i = 0; i < outputFrames; i += 1) {
+          const t = clamp01((done0 + i) / total);
+          dst[i] = (1 - t) * aBuf[i]! + t * bBuf[i]!;
+        }
+      }
+
+      this.pushOutput(this.mixOut, outputFrames);
+      return;
+    }
+
+    // Prewarm or normal: output active only
+    this.pushOutput(this.alignedA, outputFrames);
+  }
+
+  flushSegment(
+    outputFrames: number,
+    decision: SwapStepDecisionRT<EngineKindType>,
+  ): void {
+    this.updateTelemetry(decision);
+
+    const active: StretchEngine | null = this.bank.get(
+      decision.status.activeEngineKind,
+    );
+    const next: StretchEngine | null = this.bank.get(
+      decision.status.nextEngineKind,
+    );
+
+    // 1) Flush raw
+    if (active !== null) {
+      active.flush(this.outA, outputFrames);
+    } else {
+      for (let c = 0; c < this.channels; c += 1)
+        this.outA[c]?.fill(0, 0, outputFrames);
+    }
+
+    const runNext =
+      decision.kind === "runCurrentAndPrewarmNext" ||
+      decision.kind === "runBothForCrossfade";
+
+    if (runNext && next !== null) {
+      next.flush(this.outB, outputFrames);
     } else {
       for (let c = 0; c < this.channels; c += 1)
         this.outB[c]?.fill(0, 0, outputFrames);

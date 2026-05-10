@@ -38,6 +38,14 @@ export interface StretchEngine {
     outputFrames: number,
     params: StretchParams,
   ): void;
+
+  /**
+   * Flush pending output tail after input has ended.
+   *
+   * Does not consume new source input.
+   * Writes `outputFrames` into `dstPerChannel`.
+   */
+  flush(dstPerChannel: Float32Array[], outputFrames: number): void;
 }
 
 export interface StretchEngineInstanceOptions {
@@ -218,6 +226,30 @@ export class StretchEngineInstance implements StretchEngine {
     const playbackRate = clampPlaybackRate(params.speedFactor);
     module._seek(inputFrames, playbackRate);
     module._process(inputFrames, outputFrames);
+
+    for (let c = 0; c < channels; c += 1) {
+      const src = outputViews[c];
+      const dst = dstPerChannel[c];
+      if (src === undefined || dst === undefined) continue;
+
+      const copyLen = Math.min(outputFrames, src.length, dst.length);
+      dst.set(src.subarray(0, copyLen), 0);
+      if (copyLen < outputFrames) {
+        dst.fill(0, copyLen, outputFrames);
+      }
+    }
+  }
+
+  flush(dstPerChannel: Float32Array[], outputFrames: number): void {
+    const { module, channels, maxProcessFrames, outputViews } = this;
+
+    if (outputFrames > maxProcessFrames) {
+      throw new Error(
+        `outputFrames(${outputFrames}) > maxProcessFrames(${maxProcessFrames})`,
+      );
+    }
+
+    module._flush(outputFrames);
 
     for (let c = 0; c < channels; c += 1) {
       const src = outputViews[c];

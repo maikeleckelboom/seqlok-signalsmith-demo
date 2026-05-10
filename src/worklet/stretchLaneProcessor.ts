@@ -23,6 +23,7 @@ interface TelemetryMessage {
   readonly slotPhase: string;
   readonly mixTo: number;
   readonly blockRms: number;
+  readonly transportPhase: string;
 }
 
 type OutboundMessage = TelemetryMessage;
@@ -263,12 +264,15 @@ class StretchLaneProcessor extends AudioWorkletProcessor {
 
     const blockRms = count > 0 ? Math.sqrt(sumSq / count) : 0;
 
+    const transportPhase = runtime.transportPhase;
+
     const msg: TelemetryMessage = {
       type: "telemetry",
       timelineFrame,
       slotPhase,
       mixTo,
       blockRms,
+      transportPhase,
     };
 
     this.port.postMessage(msg as OutboundMessage);
