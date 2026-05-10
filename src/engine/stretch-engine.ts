@@ -1,5 +1,3 @@
-// File: src/engine/stretch-engine.ts
-
 import type { SignalsmithStretchModule, CBool } from "../../vendor/src";
 
 import type { EngineKind } from "./engine-kind";

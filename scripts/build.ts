@@ -138,21 +138,51 @@ async function ensureDir(dir: string): Promise<void> {
   await fs.mkdir(dir, { recursive: true });
 }
 
-// Development shim for when em++ is not available
+// Smoke-build shim only. This is not the real DSP engine.
 async function writeShim(): Promise<void> {
   await ensureDir(OUT_DIR);
 
   const shimSource = [
     "export default async function create() {",
-    "  return {",
-    "    HEAPF32: new Float32Array(1024),",
-    "    _bng_init() { return 1; },",
-    "    _bng_setBuffers() { return 0; },",
-    "    _bng_process() { return 0; },",
-    "    _bng_latency() { return 0; },",
-    "    _bng_output_position() { return 0; },",
-    "    _bng_dispose() {},",
+    "  let channels = 0;",
+    "  let bufferLength = 0;",
+    "  let heap = new Float32Array(1024);",
+    "  const module = {",
+    "    HEAPF32: heap,",
+    "    _presetDefault() {},",
+    "    _presetCheaper() {},",
+    "    _configure() {},",
+    "    _setBuffers(nextChannels, nextBufferLength) {",
+    "      channels = nextChannels | 0;",
+    "      bufferLength = nextBufferLength | 0;",
+    "      const totalSamples = Math.max(1024, channels * bufferLength * 2);",
+    "      heap = new Float32Array(totalSamples);",
+    "      module.HEAPF32 = heap;",
+    "      return 0;",
+    "    },",
+    "    _inputLatency() { return 0; },",
+    "    _outputLatency() { return 0; },",
+    "    _reset() {},",
+    "    _setTransposeSemitones() {},",
+    "    _setFormantSemitones() {},",
+    "    _setFormantBase() {},",
+    "    _seek() {},",
+    "    _flush() {},",
+    "    _dispose() {},",
+    "    _process(inputFrames, outputFrames) {",
+    "      const frameCount = Math.min(inputFrames | 0, outputFrames | 0, bufferLength);",
+    "      for (let c = 0; c < channels; c += 1) {",
+    "        const inputBase = c * bufferLength;",
+    "        const outputBase = (channels + c) * bufferLength;",
+    "        heap.copyWithin(outputBase, inputBase, inputBase + frameCount);",
+    "        if (frameCount < bufferLength) {",
+    "          heap.fill(0, outputBase + frameCount, outputBase + bufferLength);",
+    "        }",
+    "      }",
+    "      return outputFrames | 0;",
+    "    },",
     "  };",
+    "  return module;",
     "}",
     "",
   ].join("\n");
@@ -178,10 +208,20 @@ async function build(): Promise<void> {
 
   const cfgDir = cfgPath !== null ? path.dirname(cfgPath) : SRC_DIR;
 
-  const useShim = process.env.DEV_SHIM === "1" || !(await haveEmcc());
-  if (useShim) {
+  const shimRequested = process.env.DEV_SHIM === "1";
+  if (shimRequested) {
     await writeShim();
     return;
+  }
+
+  if (!(await haveEmcc())) {
+    throw new Error(
+      [
+        "em++ not found.",
+        "This demo requires a real WASM build for normal dev/build flows.",
+        "Use DEV_SHIM=1 only for smoke builds, not for the real demo runtime.",
+      ].join(" "),
+    );
   }
 
   const args: string[] = [];

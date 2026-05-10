@@ -8,7 +8,7 @@ on:
 
 jobs:
   shim-build:
-    name: Shim build (no Emscripten)
+    name: Shim smoke build (no Emscripten)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -19,9 +19,7 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm run vendor
-      - run: pnpm run build
-        env:
-          DEV_SHIM: "1"
+      - run: pnpm run build:shim
 
   full-build:
     name: Full build (with Emscripten)
@@ -39,5 +37,4 @@ jobs:
           version: 3.1.73
       - run: pnpm install --frozen-lockfile
       - run: pnpm run vendor
-      - run: pnpm run build:wasm
       - run: pnpm run build

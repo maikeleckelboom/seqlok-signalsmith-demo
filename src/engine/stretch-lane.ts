@@ -1,5 +1,3 @@
-// File: src/engine/stretch-lane.ts
-
 import { createModule } from "../../vendor/src";
 
 import type { LaneRuntime } from "../app/lane-runtime";

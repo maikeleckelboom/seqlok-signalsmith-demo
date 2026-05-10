@@ -49,33 +49,31 @@ scripts/                — Build and vendor tooling
 
 - **Node.js** >= 22.12.0 (see `.node-version`)
 - **pnpm** >= 9 (the `packageManager` field in `package.json` takes effect with Corepack)
-- **em++** (Emscripten) — optional, only needed for real WASM compilation
+- **em++** (Emscripten) — required for a real audio build
 
 ---
 
 ## Setup
 
-### Fast path (no Emscripten required)
+### Real demo path
+
+This repo's actual audio demo requires a real Emscripten build.
 
 ```bash
 pnpm install
 pnpm run vendor
-pnpm run dev          # or: pnpm run build
+pnpm run build:wasm
+pnpm run dev
 ```
 
-The build script auto-detects whether `em++` is available. If not, it writes a dev shim
-that provides stub implementations of the WASM bridge functions — enough for
-TypeScript to typecheck and Vite to bundle the app.
+### Shim smoke path
 
-### Full path (with WASM compilation)
-
-Install Emscripten (e.g. via `emsdk`), then:
+This is only for bundle/typecheck smoke work. It is not the real DSP runtime.
 
 ```bash
 pnpm install
 pnpm run vendor
-pnpm run build:wasm   # compiles real WASM module via em++
-pnpm run dev          # or: pnpm run build
+pnpm run build:shim
 ```
 
 ---
@@ -83,12 +81,14 @@ pnpm run dev          # or: pnpm run build
 ## Scripts
 
 | Script | Purpose |
-|---|---|
-| `pnpm run dev` | Generate module (or shim), then start Vite dev server |
-| `pnpm run build` | Generate module (or shim), typecheck, and bundle |
+|---|---|---|
+| `pnpm run dev` | Compile WASM module, then start Vite dev server |
+| `pnpm run build` | Compile WASM module, typecheck, and bundle |
 | `pnpm run vendor` | Download vendored Signalsmith C++ headers |
 | `pnpm run build:wasm` | Compile WASM module via em++ (requires Emscripten) |
-| `pnpm run build:all` | vendor + build:wasm + build |
+| `pnpm run dev:shim` | Shim-only smoke build, then dev server |
+| `pnpm run build:shim` | Shim-only smoke build, typecheck, and bundle |
+| `pnpm run build:all` | vendor + build |
 | `pnpm run preview` | Preview production build |
 
 ---
