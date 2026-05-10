@@ -23,4 +23,11 @@ dist-ssr
 *.sln
 *.sw?
 
+# Vendor / generated
 .cache
+vendor/dist
+
+# Local environment
+.env
+.env.*
+.pnpm-store
