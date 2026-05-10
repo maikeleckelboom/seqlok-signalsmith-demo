@@ -3,25 +3,27 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "packageManager": "pnpm@11.0.9",
+  "engines": {
+    "node": ">=22.12.0"
+  },
   "scripts": {
-    "dev": "vite",
-    "build": "vue-tsc -b && vite build",
+    "dev": "tsx scripts/build.ts && vite",
+    "build": "tsx scripts/build.ts && vue-tsc -b && vite build",
     "preview": "vite preview",
     "vendor": "tsx scripts/vendor.ts",
     "build:wasm": "tsx scripts/build.ts",
     "build:all": "pnpm run vendor && pnpm run build:wasm && pnpm run build"
   },
   "dependencies": {
+    "@seqlok/commands": "workspace:*",
+    "@seqlok/hotswap": "workspace:*",
+    "@seqlok/integration": "workspace:*",
     "@tailwindcss/vite": "^4.1.17",
     "tailwindcss": "^4.1.17",
     "vue": "^3.5.24"
   },
   "devDependencies": {
-    "@seqlok/commands": "link:../../maikel/.local/share/pnpm/global/5/node_modules/@seqlok/commands",
-    "@seqlok/core": "link:../../maikel/.local/share/pnpm/global/5/node_modules/@seqlok/core",
-    "@seqlok/hotswap": "link:../../maikel/.local/share/pnpm/global/5/node_modules/@seqlok/hotswap",
-    "@seqlok/integration": "link:../../maikel/.local/share/pnpm/global/5/node_modules/@seqlok/integration",
-    "@seqlok/primitives": "link:../../maikel/.local/share/pnpm/global/5/node_modules/@seqlok/primitives",
     "@types/audioworklet": "^0.0.92",
     "@types/node": "^24.10.1",
     "@vitejs/plugin-vue": "^6.0.1",
@@ -30,13 +32,10 @@
     "prettier": "4.0.0-alpha.13",
     "tsx": "^4.21.0",
     "typescript": "~5.9.3",
-    "vite": "npm:rolldown-vite@7.2.5",
+    "vite": "^8.0.11",
     "vue-tsc": "^3.1.4"
   },
   "pnpm": {
-    "overrides": {
-      "vite": "npm:rolldown-vite@7.2.5"
-    },
     "onlyBuiltDependencies": [
       "esbuild"
     ]

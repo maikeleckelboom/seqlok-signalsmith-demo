@@ -1,0 +1,10 @@
+{
+  "name": "@seqlok/base",
+  "version": "0.3.0-next.0",
+  "description": "Seqlok error algebra, invariants, and shared protocol shapes (frozen snapshot).",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": ["dist/**/*", "UPSTREAM.md"]
+}

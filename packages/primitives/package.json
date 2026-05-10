@@ -1,0 +1,13 @@
+{
+  "name": "@seqlok/primitives",
+  "version": "0.3.0-next.0",
+  "description": "Low-level primitives for Seqlok: seqlocks, planes, atomics, and SWSR ring buffers (frozen snapshot).",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": ["dist/**/*", "UPSTREAM.md"],
+  "dependencies": {
+    "@seqlok/base": "workspace:*"
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "name": "@seqlok/integration",
+  "version": "0.3.0-next.0",
+  "description": "Integration wiring on top of Seqlok core, commands, and hotswap (frozen snapshot).",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": ["dist/**/*", "UPSTREAM.md"],
+  "dependencies": {
+    "@seqlok/base": "workspace:*",
+    "@seqlok/primitives": "workspace:*",
+    "@seqlok/core": "workspace:*",
+    "@seqlok/commands": "workspace:*",
+    "@seqlok/hotswap": "workspace:*"
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "name": "@seqlok/core",
+  "version": "0.3.0-next.0",
+  "description": "Seqlok core: spec definitions, bindings, handoff, and shared context (frozen snapshot).",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": ["dist/**/*", "UPSTREAM.md"],
+  "dependencies": {
+    "@seqlok/base": "workspace:*",
+    "@seqlok/primitives": "workspace:*"
+  }
+}
