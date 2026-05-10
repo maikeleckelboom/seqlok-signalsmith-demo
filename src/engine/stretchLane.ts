@@ -1,9 +1,9 @@
 import { createModule } from "../../vendor/src";
 
 import type { LaneRuntime } from "../app/lane-runtime";
-import { EngineKind, type EngineKind as EngineKindType } from "./engine-kind";
-import { type EngineBank, SimpleEngineBank } from "./engine-bank";
-import type { StretchParams, StretchStructuralConfig } from "./stretch-config";
+import { EngineKind, type EngineKind as EngineKindType } from "./engineKind";
+import { type EngineBank, SimpleEngineBank } from "./engineBank";
+import type { StretchParams, StretchStructuralConfig } from "./stretchConfig";
 
 import {
   createTicketId,
@@ -12,7 +12,7 @@ import {
   type SwapTicketRT,
 } from "@seqlok/hotswap";
 
-import { type StretchEngine, StretchEngineInstance } from "./stretch-engine";
+import { type StretchEngine, StretchEngineInstance } from "./stretchEngine";
 
 export interface StretchLaneOptions {
   readonly lane: LaneRuntime;
@@ -22,7 +22,6 @@ export interface StretchLaneOptions {
   readonly structural: StretchStructuralConfig;
   readonly initialParams: StretchParams;
 
-  readonly pullInput: (dstPerChannel: Float32Array[], frames: number) => void;
   readonly pushOutput: (srcPerChannel: Float32Array[], frames: number) => void;
 }
 
@@ -36,14 +35,6 @@ function clamp01(x: number): number {
   if (x <= 0) return 0;
   if (x >= 1) return 1;
   return x;
-}
-
-function copyFrames(
-  dst: Float32Array,
-  src: Float32Array,
-  frames: number,
-): void {
-  for (let i = 0; i < frames; i += 1) dst[i] = src[i] ?? 0;
 }
 
 function cloneParams(p: StretchParams): StretchParams {
@@ -108,11 +99,8 @@ export class StretchLaneComposite {
 
   private readonly channels: number;
   private readonly blockSamples: number;
+  private maxIntervalSamples: number;
 
-  private readonly pullInputRaw: (
-    dstPerChannel: Float32Array[],
-    frames: number,
-  ) => void;
   private readonly pushOutput: (
     srcPerChannel: Float32Array[],
     frames: number,
@@ -131,10 +119,6 @@ export class StretchLaneComposite {
   // High-water mark: never decrease while running.
   private laneDelayFrames = 0;
 
-  // Segment input cache
-  private readonly inSeg: Float32Array[];
-  private inSegValid = false;
-
   private liveParams: StretchParams;
   private swapParams: StretchParams | null = null;
 
@@ -144,13 +128,6 @@ export class StretchLaneComposite {
   private lastQuantumFrames = 128;
   private currentActiveKind: EngineKindType = EngineKind.A;
 
-  private readonly laneCallbacks: {
-    readonly renderWithDecision: (
-      frames: number,
-      decision: SwapStepDecisionRT<EngineKindType>,
-    ) => void;
-  };
-
   constructor(options: StretchLaneOptions) {
     const {
       lane,
@@ -158,15 +135,14 @@ export class StretchLaneComposite {
       blockSamples,
       structural,
       initialParams,
-      pullInput,
       pushOutput,
     } = options;
 
     this.lane = lane;
     this.channels = channels;
     this.blockSamples = blockSamples;
+    this.maxIntervalSamples = structural.intervalSamples;
 
-    this.pullInputRaw = pullInput;
     this.pushOutput = pushOutput;
 
     this.liveParams = initialParams;
@@ -178,7 +154,6 @@ export class StretchLaneComposite {
     const alignedA: Float32Array[] = [];
     const alignedB: Float32Array[] = [];
     const mixOut: Float32Array[] = [];
-    const inSeg: Float32Array[] = [];
     const delayA: DelayLine[] = [];
     const delayB: DelayLine[] = [];
 
@@ -194,8 +169,6 @@ export class StretchLaneComposite {
       alignedB.push(new Float32Array(blockSamples));
       mixOut.push(new Float32Array(blockSamples));
 
-      inSeg.push(new Float32Array(blockSamples));
-
       delayA.push(new DelayLine(MAX_DELAY, safety));
       delayB.push(new DelayLine(MAX_DELAY, safety));
     }
@@ -206,15 +179,8 @@ export class StretchLaneComposite {
     this.alignedB = alignedB;
     this.mixOut = mixOut;
 
-    this.inSeg = inSeg;
-
     this.delayA = delayA;
     this.delayB = delayB;
-
-    this.laneCallbacks = {
-      renderWithDecision: (frames, decision) =>
-        this.renderSegment(frames, decision),
-    };
 
     void this.spawnInitialEngines(structural);
   }
@@ -223,13 +189,42 @@ export class StretchLaneComposite {
     return { phase: this.telemetryPhase, mixTo: this.telemetryMixTo };
   }
 
-  processBlock(blockFrames: number): void {
-    this.lastQuantumFrames = Math.max(1, blockFrames);
-    this.lane.processBlock(blockFrames, this.laneCallbacks);
+  getMaxLatencyFrames(): number {
+    return this.laneDelayFrames;
+  }
+
+  getRequiredPreRollFrames(): number {
+    return Math.max(
+      this.blockSamples + this.maxIntervalSamples,
+      this.laneDelayFrames,
+    );
   }
 
   updateParams(next: StretchParams): void {
     this.liveParams = next;
+  }
+
+  resetTransport(playbackRate: number): void {
+    this.swapParams = null;
+    this.telemetryPhase = "idle";
+    this.telemetryMixTo = 0;
+
+    this.resetDelayForKind(EngineKind.A);
+    this.resetDelayForKind(EngineKind.B);
+
+    this.bank.get(EngineKind.A)?.resetTransport(playbackRate);
+    this.bank.get(EngineKind.B)?.resetTransport(playbackRate);
+  }
+
+  preRollAll(
+    canonicalInput: Float32Array[],
+    inputFrames: number,
+    playbackRate: number,
+  ): void {
+    const a = this.bank.get(EngineKind.A);
+    const b = this.bank.get(EngineKind.B);
+    if (a) a.preRoll(canonicalInput, inputFrames, playbackRate);
+    if (b) b.preRoll(canonicalInput, inputFrames, playbackRate);
   }
 
   async reconfigureStructurally(
@@ -246,9 +241,12 @@ export class StretchLaneComposite {
       kind: nextKind,
       module,
       structural: nextStructural,
-      maxBlockSamples: this.blockSamples,
-      pullInput: (dst, frames) => this.pullInputCached(dst, frames),
+      maxProcessFrames: this.blockSamples,
     });
+
+    if (nextStructural.intervalSamples > this.maxIntervalSamples) {
+      this.maxIntervalSamples = nextStructural.intervalSamples;
+    }
 
     this.bank.register(engine);
 
@@ -258,7 +256,7 @@ export class StretchLaneComposite {
     }
 
     // Derived minimum: give the next engine enough lead-in that:
-    // - its own latency is fully “filled”
+    // - its own latency is fully "filled"
     // - plus one interval of safety (helps preset/state settle)
     const derivedMinLeadIn =
       this.laneDelayFrames + nextStructural.intervalSamples;
@@ -284,7 +282,7 @@ export class StretchLaneComposite {
     // Snapshot params for the swap window (prewarm + crossfade).
     this.swapParams = cloneParams(this.liveParams);
 
-    // Reset delay history for the slot we’re overwriting (so pad changes don’t leak old audio).
+    // Reset delay history for the slot we're overwriting.
     this.resetDelayForKind(nextKind);
   }
 
@@ -301,8 +299,7 @@ export class StretchLaneComposite {
       kind: EngineKind.A,
       module: moduleA,
       structural,
-      maxBlockSamples: this.blockSamples,
-      pullInput: (dst, frames) => this.pullInputCached(dst, frames),
+      maxProcessFrames: this.blockSamples,
     });
 
     const moduleB = await createModule();
@@ -310,8 +307,7 @@ export class StretchLaneComposite {
       kind: EngineKind.B,
       module: moduleB,
       structural,
-      maxBlockSamples: this.blockSamples,
-      pullInput: (dst, frames) => this.pullInputCached(dst, frames),
+      maxProcessFrames: this.blockSamples,
     });
 
     this.bank.register(engineA);
@@ -323,27 +319,12 @@ export class StretchLaneComposite {
     );
   }
 
-  private pullInputCached(dstPerChannel: Float32Array[], frames: number): void {
-    if (!this.inSegValid) {
-      this.pullInputRaw(this.inSeg, frames);
-      this.inSegValid = true;
-    }
-
-    for (let c = 0; c < this.channels; c += 1) {
-      const dst = dstPerChannel[c];
-      const src = this.inSeg[c];
-      if (dst !== undefined && src !== undefined) {
-        copyFrames(dst, src, frames);
-      }
-    }
-  }
-
-  private renderSegment(
-    frames: number,
+  renderSegment(
+    outputFrames: number,
     decision: SwapStepDecisionRT<EngineKindType>,
+    canonicalInput: Float32Array[],
+    inputFrames: number,
   ): void {
-    this.inSegValid = false;
-
     this.telemetryPhase = decision.status.phase;
     this.currentActiveKind = decision.status.activeEngineKind;
 
@@ -379,10 +360,10 @@ export class StretchLaneComposite {
 
     // 1) Render raw
     if (active !== null) {
-      active.render(this.outA, frames, params);
+      active.render(this.outA, canonicalInput, inputFrames, outputFrames, params);
     } else {
       for (let c = 0; c < this.channels; c += 1)
-        this.outA[c]?.fill(0, 0, frames);
+        this.outA[c]?.fill(0, 0, outputFrames);
     }
 
     const runNext =
@@ -390,10 +371,10 @@ export class StretchLaneComposite {
       decision.kind === "runBothForCrossfade";
 
     if (runNext && next !== null) {
-      next.render(this.outB, frames, params);
+      next.render(this.outB, canonicalInput, inputFrames, outputFrames, params);
     } else {
       for (let c = 0; c < this.channels; c += 1)
-        this.outB[c]?.fill(0, 0, frames);
+        this.outB[c]?.fill(0, 0, outputFrames);
     }
 
     // 2) ALC alignment
@@ -404,8 +385,8 @@ export class StretchLaneComposite {
     const padB = Math.max(0, this.laneDelayFrames - latB);
 
     for (let c = 0; c < this.channels; c += 1) {
-      this.delayA[c]!.process(this.outA[c]!, this.alignedA[c]!, frames, padA);
-      this.delayB[c]!.process(this.outB[c]!, this.alignedB[c]!, frames, padB);
+      this.delayA[c]!.process(this.outA[c]!, this.alignedA[c]!, outputFrames, padA);
+      this.delayB[c]!.process(this.outB[c]!, this.alignedB[c]!, outputFrames, padB);
     }
 
     // 3) Mix/output
@@ -422,23 +403,24 @@ export class StretchLaneComposite {
         const bBuf = this.alignedB[c]!;
         const dst = this.mixOut[c]!;
 
-        for (let i = 0; i < frames; i += 1) {
+        for (let i = 0; i < outputFrames; i += 1) {
           const t = clamp01((done0 + i) / total);
           dst[i] = (1 - t) * aBuf[i]! + t * bBuf[i]!;
         }
       }
 
-      this.pushOutput(this.mixOut, frames);
+      this.pushOutput(this.mixOut, outputFrames);
       return;
     }
 
-    // Prewarm: output active only
-    if (decision.kind === "runCurrentAndPrewarmNext") {
-      this.pushOutput(this.alignedA, frames);
-      return;
-    }
+    // Prewarm or normal: output active only
+    this.pushOutput(this.alignedA, outputFrames);
+  }
 
-    // Normal / retire boundary: output active only
-    this.pushOutput(this.alignedA, frames);
+  pushSilence(outputFrames: number): void {
+    for (let c = 0; c < this.channels; c += 1) {
+      this.alignedA[c]?.fill(0, 0, outputFrames);
+    }
+    this.pushOutput(this.alignedA, outputFrames);
   }
 }

@@ -5,11 +5,19 @@ using a Seqlok-style hot-swap protocol:
 
 **spawn → prime → preWarm → crossFade → retire**
 
+Transport, seek, and time-stretch are owned by the worklet runtime via a
+**SAB-backed planar PCM asset**. The main thread only decodes files, builds the
+asset, and dispatches commands (`play`, `pause`, `seekToFrame`). The worklet
+computes fixed-output / variable-input frame economics, maintains the single
+source frame cursor, and performs explicit pre-roll before steady-state
+rendering.
+
 This repo is meant to be "show, don't tell" for:
 - RT-safe hotswapping (reject-while-busy, no overlapping swaps)
 - segment-correct rendering (respecting offsets inside an audio block)
-- input segment caching (both engines see identical samples during prewarm/crossfade)
+- canonical input segments (both engines see identical samples during prewarm/crossfade)
 - per-sample crossfade ramps derived from fade geometry (not UI progress)
+- worklet-owned transport with explicit seek/start pre-roll lifecycle
 - a path toward a Debug Lab UI with "time travel" via SAB telemetry snapshots
 
 ---
@@ -27,7 +35,7 @@ When the invariants are respected, you can swap structural DSP configurations du
 ## Repository layout
 
 ```
-src/                    — Vue app, worklet, lane runtime, DSP wrappers
+src/                    — Vue app, worklet, lane runtime, DSP wrappers, transport substrate
 vendor/                 — Vendored Signalsmith C++ headers and WASM bridge
   src/                  —   Emscripten bindings (main.cpp, module.d.ts)
   dist/emscripten/      —   Generated WASM module (or dev shim)

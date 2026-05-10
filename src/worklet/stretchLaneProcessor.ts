@@ -1,32 +1,21 @@
 import {
   createStretchLaneRuntime,
   type StretchLaneRuntime,
-} from "../lane/stretch-lane-runtime";
+} from "../lane/stretchLaneRuntime";
 import type {
   StretchParams,
   StretchStructuralConfig,
-} from "../engine/stretch-config";
+} from "../engine/stretchConfig";
+import type { LoadedPcmAsset, RuntimePcmAsset } from "../transport/pcmAssetTypes";
 
-interface InitMessage {
-  readonly type: "init";
-  readonly mailboxId: string;
-  readonly structural: StretchStructuralConfig;
-  readonly initialParams: StretchParams;
-}
-
-interface UpdateParamsMessage {
-  readonly type: "updateParams";
-  readonly params: StretchParams;
-}
-
-interface ScheduleSwapMessage {
-  readonly type: "scheduleSwap";
-  readonly nextStructural: StretchStructuralConfig;
-  readonly fadeFrames: number;
-  readonly prewarmLeadInFrames: number;
-}
-
-type InboundMessage = InitMessage | UpdateParamsMessage | ScheduleSwapMessage;
+type InboundMessage =
+  | { type: "init"; mailboxId: string; structural: StretchStructuralConfig; initialParams: StretchParams }
+  | { type: "loadAsset"; asset: LoadedPcmAsset }
+  | { type: "play" }
+  | { type: "pause" }
+  | { type: "seekToFrame"; frame: number }
+  | { type: "updateParams"; params: StretchParams }
+  | { type: "scheduleSwap"; nextStructural: StretchStructuralConfig; fadeFrames: number; prewarmLeadInFrames: number };
 
 interface TelemetryMessage {
   readonly type: "telemetry";
@@ -37,6 +26,16 @@ interface TelemetryMessage {
 }
 
 type OutboundMessage = TelemetryMessage;
+
+function toRuntimeAsset(asset: LoadedPcmAsset): RuntimePcmAsset {
+  return {
+    id: asset.id,
+    channelCount: asset.channelCount,
+    sampleRate: asset.sampleRate,
+    totalFrames: asset.totalFrames,
+    channels: asset.channelDataSab.map((sab) => new Float32Array(sab)),
+  };
+}
 
 /**
  * AudioWorklet side of a stretch lane.
@@ -52,7 +51,6 @@ class StretchLaneProcessor extends AudioWorkletProcessor {
 
   private runtime: StretchLaneRuntime | null = null;
 
-  private inputScratch: Float32Array[] = [];
   private outputScratch: Float32Array[] = [];
 
   constructor() {
@@ -65,6 +63,22 @@ class StretchLaneProcessor extends AudioWorkletProcessor {
       switch (msg.type) {
         case "init": {
           this.handleInit(msg);
+          break;
+        }
+        case "loadAsset": {
+          this.handleLoadAsset(msg);
+          break;
+        }
+        case "play": {
+          this.handlePlay();
+          break;
+        }
+        case "pause": {
+          this.handlePause();
+          break;
+        }
+        case "seekToFrame": {
+          this.handleSeekToFrame(msg);
           break;
         }
         case "updateParams": {
@@ -80,7 +94,7 @@ class StretchLaneProcessor extends AudioWorkletProcessor {
   }
 
   process(
-    inputs: readonly Float32Array[][],
+    _inputs: readonly Float32Array[][],
     outputs: Float32Array[][],
     _parameters: Record<string, Float32Array>,
   ): boolean {
@@ -98,29 +112,7 @@ class StretchLaneProcessor extends AudioWorkletProcessor {
       return true;
     }
 
-    const inputChannels = inputs[0] ?? [];
     const usedChannels = Math.min(this.channels, outputChannels.length);
-
-    // inputs -> inputScratch
-    for (let c = 0; c < usedChannels; c += 1) {
-      const scratch = this.inputScratch[c];
-      if (scratch === undefined) {
-        continue;
-      }
-
-      const inChan = inputChannels[c];
-      if (inChan === undefined) {
-        scratch.fill(0, 0, Math.min(frames, scratch.length));
-        continue;
-      }
-
-      const limit = Math.min(frames, inChan.length, scratch.length);
-      scratch.set(inChan.subarray(0, limit), 0);
-
-      if (limit < frames) {
-        scratch.fill(0, limit, Math.min(frames, scratch.length));
-      }
-    }
 
     if (this.runtime !== null) {
       this.runtime.processBlock(frames);
@@ -155,7 +147,7 @@ class StretchLaneProcessor extends AudioWorkletProcessor {
     return true;
   }
 
-  private handleInit(msg: InitMessage): void {
+  private handleInit(msg: Extract<InboundMessage, { type: "init" }>): void {
     const { structural, initialParams, mailboxId } = msg;
 
     this.channels = structural.channels;
@@ -169,21 +161,6 @@ class StretchLaneProcessor extends AudioWorkletProcessor {
       mailboxId,
       structural,
       initialParams,
-
-      pullInput(dstPerChannel, frames): void {
-        const channelsToUse = Math.min(self.channels, dstPerChannel.length);
-        for (let c = 0; c < channelsToUse; c += 1) {
-          const src = self.inputScratch[c];
-          const dst = dstPerChannel[c];
-
-          if (src === undefined || dst === undefined) {
-            continue;
-          }
-
-          const limit = Math.min(frames, src.length, dst.length);
-          dst.set(src.subarray(0, limit), 0);
-        }
-      },
 
       pushOutput(srcPerChannel, frames): void {
         const channelsToUse = Math.min(self.channels, srcPerChannel.length);
@@ -206,17 +183,33 @@ class StretchLaneProcessor extends AudioWorkletProcessor {
     });
   }
 
-  private handleUpdateParams(msg: UpdateParamsMessage): void {
-    if (this.runtime === null) {
-      return;
-    }
+  private handleLoadAsset(msg: Extract<InboundMessage, { type: "loadAsset" }>): void {
+    if (this.runtime === null) return;
+    this.runtime.loadAsset(toRuntimeAsset(msg.asset));
+  }
+
+  private handlePlay(): void {
+    if (this.runtime === null) return;
+    this.runtime.play();
+  }
+
+  private handlePause(): void {
+    if (this.runtime === null) return;
+    this.runtime.pause();
+  }
+
+  private handleSeekToFrame(msg: Extract<InboundMessage, { type: "seekToFrame" }>): void {
+    if (this.runtime === null) return;
+    this.runtime.seekToFrame(msg.frame);
+  }
+
+  private handleUpdateParams(msg: Extract<InboundMessage, { type: "updateParams" }>): void {
+    if (this.runtime === null) return;
     this.runtime.updateParams(msg.params);
   }
 
-  private handleScheduleSwap(msg: ScheduleSwapMessage): void {
-    if (this.runtime === null) {
-      return;
-    }
+  private handleScheduleSwap(msg: Extract<InboundMessage, { type: "scheduleSwap" }>): void {
+    if (this.runtime === null) return;
 
     const { nextStructural, fadeFrames, prewarmLeadInFrames } = msg;
 
@@ -228,15 +221,12 @@ class StretchLaneProcessor extends AudioWorkletProcessor {
   }
 
   private resizeScratch(channels: number, frames: number): void {
-    const inputScratch: Float32Array[] = [];
     const outputScratch: Float32Array[] = [];
 
     for (let c = 0; c < channels; c += 1) {
-      inputScratch[c] = new Float32Array(frames);
       outputScratch[c] = new Float32Array(frames);
     }
 
-    this.inputScratch = inputScratch;
     this.outputScratch = outputScratch;
   }
 

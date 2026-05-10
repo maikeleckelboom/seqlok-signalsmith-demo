@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from "vue";
-import { StretchLaneNode } from "./lane/stretch-lane-node.ts";
-import stretchWorkletUrl from "./worklet/stretch-lane-processor.ts?url";
+import { StretchLaneNode } from "./lane/stretchLaneNode.ts";
+import stretchWorkletUrl from "./worklet/stretchLaneProcessor.ts?url";
 import type {
   StretchParams,
   StretchStructuralConfig,
-} from "./engine/stretch-config";
+} from "./engine/stretchConfig";
+import { buildSharedPcmAsset } from "./transport/buildSharedPcmAsset.ts";
 
 // ----------------------
 // Static config
@@ -35,8 +36,6 @@ const baseParams: StretchParams = {
 
 let audioContext: AudioContext | null = null;
 let stretchNode: StretchLaneNode | null = null;
-let currentSource: AudioBufferSourceNode | null = null;
-let decodedBuffer: AudioBuffer | null = null;
 let workletLoadedForContext: AudioContext | null = null;
 
 // Reactive UI flags
@@ -49,6 +48,8 @@ const hasFile = ref(false);
 // File info
 const fileName = ref<string | null>(null);
 const fileDuration = ref(0);
+const fileSampleRate = ref(0);
+const fileTotalFrames = ref(0);
 
 // User controls
 const speedFactor = ref(baseParams.speedFactor); // time-stretch ratio
@@ -99,37 +100,6 @@ watch([speedFactor, pitchSemitones], () => {
 // ----------------------
 // Audio / worklet wiring
 // ----------------------
-
-function restartFromOffset(offsetSeconds: number): void {
-  if (!decodedBuffer || !audioContext || !stretchNode) {
-    return;
-  }
-
-  // Tear down existing source
-  if (currentSource !== null) {
-    currentSource.onended = null;
-    currentSource.stop();
-    currentSource.disconnect();
-    currentSource = null;
-  }
-
-  const src = audioContext.createBufferSource();
-  src.buffer = decodedBuffer;
-
-  // Source runs at 1x; Signalsmith handles time-stretch via params.
-  src.playbackRate.value = 1;
-
-  src.connect(stretchNode);
-  src.start(0, offsetSeconds);
-
-  currentSource = src;
-  isPlaying.value = true;
-
-  src.onended = () => {
-    isPlaying.value = false;
-    currentSource = null;
-  };
-}
 
 async function ensureWorklet(ctx: AudioContext): Promise<void> {
   if (workletLoadedForContext === ctx) {
@@ -183,10 +153,7 @@ async function ensureNode(): Promise<StretchLaneNode> {
       ...structuralBase,
       sampleRate: ctx.sampleRate,
     },
-    initialParams: {
-      ...baseParams,
-      speedFactor: speedFactor.value,
-    },
+    initialParams: buildParams(),
     mailboxId: "stretch-lane-0",
   });
 
@@ -212,51 +179,51 @@ async function handleFileChange(event: Event): Promise<void> {
 
   const ctx = await ensureContext();
   const arrayBuffer = await file.arrayBuffer();
-  decodedBuffer = await ctx.decodeAudioData(arrayBuffer);
+  const decodedBuffer = await ctx.decodeAudioData(arrayBuffer);
+
+  const asset = buildSharedPcmAsset(decodedBuffer);
+
+  const node = await ensureNode();
+  node.loadAsset(asset);
+  pushParamsToNode();
 
   hasFile.value = true;
   fileName.value = file.name;
   fileDuration.value = decodedBuffer.duration;
+  fileSampleRate.value = decodedBuffer.sampleRate;
+  fileTotalFrames.value = decodedBuffer.length;
   seekPosition.value = 0;
 }
 
 async function play(): Promise<void> {
-  if (!decodedBuffer) {
+  if (!hasFile.value) {
     return;
   }
 
   const ctx = await ensureContext();
   await ctx.resume();
-  await ensureNode();
+  const node = await ensureNode();
+  pushParamsToNode();
 
-  seekPosition.value = 0;
-  restartFromOffset(0);
+  node.play();
+  isPlaying.value = true;
 }
 
-function stop(): void {
-  if (currentSource !== null) {
-    currentSource.onended = null;
-    currentSource.stop();
-    currentSource.disconnect();
-    currentSource = null;
-  }
+function pause(): void {
+  stretchNode?.pause();
   isPlaying.value = false;
 }
 
-// Seek slider → restart source at new offset
+// Seek slider -> explicit seekToFrame command
 function applySeek(): void {
-  if (!decodedBuffer) {
-    return;
-  }
-  const duration = decodedBuffer.duration;
-  if (duration <= 0) {
+  if (!hasFile.value || fileTotalFrames.value <= 0) {
     return;
   }
 
   const clamped = Math.min(1, Math.max(0, seekPosition.value));
-  const offsetSeconds = clamped * duration;
+  const targetFrame = Math.floor(clamped * fileTotalFrames.value);
 
-  restartFromOffset(offsetSeconds);
+  stretchNode?.seekToFrame(targetFrame);
 }
 
 // ----------------------
@@ -295,7 +262,7 @@ async function triggerSwap(): Promise<void> {
 // ----------------------
 
 onBeforeUnmount(() => {
-  stop();
+  pause();
 
   if (stretchNode !== null) {
     stretchNode.disconnect();
@@ -320,8 +287,9 @@ onBeforeUnmount(() => {
 
       <p class="text-sm text-slate-400">
         This is running the real Signalsmith stretch WASM through a Seqlok
-        hotswap lane inside an <code>AudioWorkletProcessor</code>. Audio comes
-        from a decoded file (via <code>AudioBufferSourceNode</code>).
+        hotswap lane inside an <code>AudioWorkletProcessor</code>. Transport,
+        seek, and time-stretch are owned by the worklet runtime via a
+        SAB-backed planar PCM asset.
       </p>
 
       <!-- File input -->
@@ -364,9 +332,9 @@ onBeforeUnmount(() => {
           type="button"
           class="px-4 py-2 rounded-lg bg-slate-700 text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed"
           :disabled="!isPlaying"
-          @click="stop"
+          @click="pause"
         >
-          Stop
+          Pause
         </button>
 
         <button
@@ -416,7 +384,7 @@ onBeforeUnmount(() => {
               step="0.01"
               class="w-40 accent-emerald-400"
             />
-            <span class="tabular-nums"> {{ speedFactor.toFixed(2) }}× </span>
+            <span class="tabular-ums"> {{ speedFactor.toFixed(2) }}× </span>
           </label>
         </div>
 
