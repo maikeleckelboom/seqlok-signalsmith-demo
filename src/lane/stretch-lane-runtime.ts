@@ -2,19 +2,19 @@ import { createLaneRuntime, type LaneRuntime } from "../app/lane-runtime";
 import {
   StretchLaneComposite,
   type StretchLaneOptions,
-} from "../engine/stretchLane";
+} from "../engine/stretch-lane";
 import type {
   StretchStructuralConfig,
   StretchParams,
-} from "../engine/stretchConfig";
-import type { RuntimePcmAsset } from "../transport/pcmAssetTypes";
+} from "../engine/stretch-config";
+import type { RuntimePcmAsset } from "../transport/pcm-asset-types";
 import {
   createSourceAssetReader,
   type SourceAssetReader,
-} from "../transport/sourceAssetReader";
-import { createTransportState } from "../transport/transportState";
-import { createInputDebtAccumulator } from "../transport/inputDebtAccumulator";
-import { createPreRollPlanner } from "../transport/preRollPlanner";
+} from "../transport/source-asset-reader";
+import { createTransportState } from "../transport/transport-state";
+import { createInputDebtAccumulator } from "../transport/input-debt-accumulator";
+import { createPreRollPlanner } from "../transport/pre-roll-planner";
 import {
   invariantCanonicalCapacity,
   invariantFlushDoesNotConsumeInput,
@@ -24,11 +24,11 @@ import {
   invariantPreRollCapacity,
   invariantSourceCursorNonNegative,
   clearLastViolations,
-} from "../transport/transportInvariants";
+} from "../transport/transport-invariants";
 import {
   buildTransportTelemetry,
   type TransportTelemetrySnapshot,
-} from "../transport/transportTelemetry";
+} from "../transport/transport-telemetry";
 
 export interface StretchLaneRuntimeOptions {
   /**

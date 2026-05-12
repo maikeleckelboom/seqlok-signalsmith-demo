@@ -1,4 +1,4 @@
-import type { RuntimePcmAsset } from "./pcmAssetTypes";
+import type { RuntimePcmAsset } from "./pcm-asset-types";
 
 export interface SourceAssetReader {
   readonly asset: RuntimePcmAsset | null;

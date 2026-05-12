@@ -1,5 +1,5 @@
-import type { EngineKind } from "./engineKind";
-import type { StretchEngine } from "./stretchEngine";
+import type { EngineKind } from "./engine-kind";
+import type { StretchEngine } from "./stretch-engine";
 
 export interface EngineBank {
   register(engine: StretchEngine): void;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createInputDebtAccumulator } from "../inputDebtAccumulator";
+import { createInputDebtAccumulator } from "../input-debt-accumulator";
 
 describe("inputDebtAccumulator", () => {
   it("returns zero when playbackRate is zero", () => {

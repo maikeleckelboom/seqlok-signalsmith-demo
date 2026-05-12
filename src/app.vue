@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from "vue";
-import { StretchLaneNode } from "./lane/stretchLaneNode.ts";
-import stretchWorkletUrl from "./worklet/stretchLaneProcessor.ts?url";
+import { StretchLaneNode } from "./lane/stretch-lane-node.ts";
+import stretchWorkletUrl from "./worklet/stretch-lane-processor.ts?url";
 import type {
   StretchParams,
   StretchStructuralConfig,
-} from "./engine/stretchConfig";
-import { buildSharedPcmAsset } from "./transport/buildSharedPcmAsset.ts";
+} from "./engine/stretch-config";
+import { buildSharedPcmAsset } from "./transport/build-shared-pcm-asset.ts";
 
 // ----------------------
 // Static config

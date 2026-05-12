@@ -1,5 +1,5 @@
-import type { SourceAssetReader } from "./sourceAssetReader";
-import type { TransportState } from "./transportState";
+import type { SourceAssetReader } from "./source-asset-reader";
+import type { TransportState } from "./transport-state";
 
 export interface PreRollPlan {
   readonly targetFrame: number;

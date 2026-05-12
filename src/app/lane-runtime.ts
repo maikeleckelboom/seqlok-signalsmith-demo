@@ -17,7 +17,7 @@ import type {
 import {
   EngineKind,
   type EngineKind as EngineKindId,
-} from "../engine/engineKind";
+} from "../engine/engine-kind";
 
 /**
  * Host-side view of the Seqlok lane:

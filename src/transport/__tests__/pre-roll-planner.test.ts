@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { createPreRollPlanner } from "../preRollPlanner";
-import { createTransportState } from "../transportState";
-import { createSourceAssetReader } from "../sourceAssetReader";
+import { createPreRollPlanner } from "../pre-roll-planner";
+import { createTransportState } from "../transport-state";
+import { createSourceAssetReader } from "../source-asset-reader";
 
 describe("preRollPlanner", () => {
   it("uses pendingSeekFrame when present", () => {

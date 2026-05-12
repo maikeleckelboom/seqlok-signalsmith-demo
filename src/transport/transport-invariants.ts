@@ -1,4 +1,4 @@
-import type { TransportPhase, TransportState } from "./transportState";
+import type { TransportPhase, TransportState } from "./transport-state";
 
 export interface InvariantViolation {
   readonly rule: string;

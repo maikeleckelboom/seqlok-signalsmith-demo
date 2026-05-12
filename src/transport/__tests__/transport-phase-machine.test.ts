@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeEach } from "vitest";
-import { createTransportState, type TransportPhase } from "../transportState";
+import { createTransportState, type TransportPhase } from "../transport-state";
 import {
   invariantPhaseTransition,
   invariantSourceCursorNonNegative,
@@ -8,7 +8,7 @@ import {
   invariantInputDebtFinite,
   clearLastViolations,
   getLastViolations,
-} from "../transportInvariants";
+} from "../transport-invariants";
 
 describe("transport phase transitions", () => {
   beforeEach(() => {

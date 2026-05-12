@@ -1,12 +1,12 @@
 import {
   createStretchLaneRuntime,
   type StretchLaneRuntime,
-} from "../lane/stretchLaneRuntime";
+} from "../lane/stretch-lane-runtime";
 import type {
   StretchParams,
   StretchStructuralConfig,
-} from "../engine/stretchConfig";
-import type { LoadedPcmAsset, RuntimePcmAsset } from "../transport/pcmAssetTypes";
+} from "../engine/stretch-config";
+import type { LoadedPcmAsset, RuntimePcmAsset } from "../transport/pcm-asset-types";
 
 type InboundMessage =
   | { type: "init"; mailboxId: string; structural: StretchStructuralConfig; initialParams: StretchParams }

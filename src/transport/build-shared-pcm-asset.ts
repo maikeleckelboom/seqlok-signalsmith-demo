@@ -1,4 +1,4 @@
-import type { LoadedPcmAsset, PcmAssetId } from "./pcmAssetTypes";
+import type { LoadedPcmAsset, PcmAssetId } from "./pcm-asset-types";
 
 let idCounter = 0;
 

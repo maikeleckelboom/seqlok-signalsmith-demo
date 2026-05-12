@@ -1,7 +1,7 @@
 import type { SignalsmithStretchModule, CBool } from "../../vendor/src";
 
-import type { EngineKind } from "./engineKind";
-import type { StretchParams, StretchStructuralConfig } from "./stretchConfig";
+import type { EngineKind } from "./engine-kind";
+import type { StretchParams, StretchStructuralConfig } from "./stretch-config";
 
 export interface StretchEngine {
   readonly kind: EngineKind;

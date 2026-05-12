@@ -1,8 +1,8 @@
 import type {
   StretchParams,
   StretchStructuralConfig,
-} from "../engine/stretchConfig";
-import type { LoadedPcmAsset } from "../transport/pcmAssetTypes";
+} from "../engine/stretch-config";
+import type { LoadedPcmAsset } from "../transport/pcm-asset-types";
 
 type ControlMessage =
   | { type: "init"; mailboxId: string; structural: StretchStructuralConfig; initialParams: StretchParams }

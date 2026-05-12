@@ -1,9 +1,9 @@
 import { createModule } from "../../vendor/src";
 
 import type { LaneRuntime } from "../app/lane-runtime";
-import { EngineKind, type EngineKind as EngineKindType } from "./engineKind";
-import { type EngineBank, SimpleEngineBank } from "./engineBank";
-import type { StretchParams, StretchStructuralConfig } from "./stretchConfig";
+import { EngineKind, type EngineKind as EngineKindType } from "./engine-kind";
+import { type EngineBank, SimpleEngineBank } from "./engine-bank";
+import type { StretchParams, StretchStructuralConfig } from "./stretch-config";
 
 import {
   createTicketId,
@@ -12,7 +12,7 @@ import {
   type SwapTicketRT,
 } from "@seqlok/hotswap";
 
-import { type StretchEngine, StretchEngineInstance } from "./stretchEngine";
+import { type StretchEngine, StretchEngineInstance } from "./stretch-engine";
 
 export interface StretchLaneOptions {
   readonly lane: LaneRuntime;

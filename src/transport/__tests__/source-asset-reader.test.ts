@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createSourceAssetReader } from "../sourceAssetReader";
+import { createSourceAssetReader } from "../source-asset-reader";
 
 describe("sourceAssetReader", () => {
   function makeAsset(totalFrames: number, channelCount = 2) {

@@ -1,5 +1,5 @@
-import type { TransportState } from "./transportState";
-import type { StretchLaneTelemetrySnapshot } from "../engine/stretchLane";
+import type { TransportState } from "./transport-state";
+import type { StretchLaneTelemetrySnapshot } from "../engine/stretch-lane";
 
 export interface TransportTelemetrySnapshot {
   readonly transportPhase: string;
