@@ -1,19 +1,19 @@
 import type { CommandProducer, CommandConsumer } from "@seqlok/commands";
-import {
-  createLaneRuntimeCore,
-  processTimelineBlock,
-  drainHotswapMailboxIntoTimeline,
-  type HotswapSlotDriver,
-  type TimelineCommand,
-  type TimelineDriver,
-  type TimelineProcessCallbacks,
-} from "@seqlok/integration";
 import type {
   HotswapCommand,
   HotswapSchedulerConfig,
   SwapStepDecisionRT,
 } from "@seqlok/hotswap";
 
+import { drainHotswapMailboxIntoTimeline } from "../lane-substrate/hotswap-timeline-drain";
+import type { HotswapSlotDriver } from "../lane-substrate/hotswap-slot-driver";
+import { createLaneRuntimeCore } from "../lane-substrate/runtime-core";
+import {
+  processTimelineBlock,
+  type TimelineCommand,
+  type TimelineDriver,
+  type TimelineProcessCallbacks,
+} from "../lane-substrate/timeline-driver";
 import {
   EngineKind,
   type EngineKind as EngineKindId,
