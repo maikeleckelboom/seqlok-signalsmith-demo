@@ -63,6 +63,15 @@ const currentPreset = ref<"default" | "cheaper">(structuralBase.preset);
   const transportPhase = ref<string>("idle");
   const mixProgress = ref(0);
   const lastBlockRms = ref(0);
+  const sourceFrameCursor = ref(0);
+  const playbackRate = ref(1);
+  const inputFramesThisBlock = ref(0);
+  const outputFramesThisBlock = ref(0);
+  const endingDrainFramesRemaining = ref(0);
+  const endingFlushFramesRemaining = ref(0);
+  const isZeroBackedInput = ref(false);
+  const activeEngineKind = ref<string>("none");
+  const nextEngineKind = ref<string | null>(null);
 
 // Derived value
 const timelineSeconds = computed(() => {
@@ -130,6 +139,15 @@ function attachTelemetry(node: StretchLaneNode): void {
     readonly mixTo: number;
     readonly blockRms: number;
     readonly transportPhase: string;
+    readonly sourceFrameCursor: number;
+    readonly playbackRate: number;
+    readonly inputFramesThisBlock: number;
+    readonly outputFramesThisBlock: number;
+    readonly endingDrainFramesRemaining: number;
+    readonly endingFlushFramesRemaining: number;
+    readonly isZeroBackedInput: boolean;
+    readonly activeEngineKind: string;
+    readonly nextEngineKind: string | null;
   }
 
   node.port.onmessage = (event: MessageEvent<TelemetryMessage>): void => {
@@ -142,6 +160,15 @@ function attachTelemetry(node: StretchLaneNode): void {
     transportPhase.value = msg.transportPhase;
     mixProgress.value = Math.min(1, Math.max(0, msg.mixTo));
     lastBlockRms.value = msg.blockRms;
+    sourceFrameCursor.value = msg.sourceFrameCursor;
+    playbackRate.value = msg.playbackRate;
+    inputFramesThisBlock.value = msg.inputFramesThisBlock;
+    outputFramesThisBlock.value = msg.outputFramesThisBlock;
+    endingDrainFramesRemaining.value = msg.endingDrainFramesRemaining;
+    endingFlushFramesRemaining.value = msg.endingFlushFramesRemaining;
+    isZeroBackedInput.value = msg.isZeroBackedInput;
+    activeEngineKind.value = msg.activeEngineKind;
+    nextEngineKind.value = msg.nextEngineKind;
   };
 }
 
@@ -418,34 +445,86 @@ onBeforeUnmount(() => {
       </div>
     </section>
 
-    <!-- Telemetry -->
-    <section
-      class="w-full max-w-xl rounded-xl border border-slate-800 bg-slate-900/60 px-4 py-3 text-xs font-mono"
-    >
-      <div class="flex justify-between mb-1">
-        <span class="text-slate-400">timeline frame</span>
-        <span>{{ timelineFrame }}</span>
+      <!-- Transport lifecycle -->
+      <div class="flex flex-wrap gap-2">
+        <span
+          v-for="phase in ['idle','priming','running','drainingInput','flushingTail','paused']"
+          :key="phase"
+          class="px-2 py-1 rounded text-[11px] font-medium border"
+          :class="
+            transportPhase === phase
+              ? phase === 'running'
+                ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300'
+                : phase === 'drainingInput' || phase === 'flushingTail'
+                  ? 'bg-amber-500/20 border-amber-500/40 text-amber-300'
+                  : phase === 'priming'
+                    ? 'bg-sky-500/20 border-sky-500/40 text-sky-300'
+                    : 'bg-slate-700 border-slate-600 text-slate-300'
+              : 'bg-slate-900 border-slate-800 text-slate-500'
+          "
+        >
+          {{ phase }}
+        </span>
       </div>
-      <div class="flex justify-between mb-1">
-        <span class="text-slate-400">timeline time</span>
-        <span>{{ timelineSeconds.toFixed(3) }} s</span>
-      </div>
-      <div class="flex justify-between mb-1">
-        <span class="text-slate-400">slot phase</span>
-        <span>{{ slotPhase }}</span>
-      </div>
-      <div class="flex justify-between mb-1">
-        <span class="text-slate-400">transport phase</span>
-        <span>{{ transportPhase }}</span>
-      </div>
-      <div class="flex justify-between mb-1">
-        <span class="text-slate-400">mix progress</span>
-        <span>{{ (mixProgress * 100).toFixed(2) }}%</span>
-      </div>
-      <div class="flex justify-between">
-        <span class="text-slate-400">last block RMS</span>
-        <span>{{ lastBlockRms.toFixed(5) }}</span>
-      </div>
-    </section>
+
+      <!-- Telemetry -->
+      <section
+        class="w-full max-w-xl rounded-xl border border-slate-800 bg-slate-900/60 px-4 py-3 text-xs font-mono"
+      >
+        <div class="flex justify-between mb-1">
+          <span class="text-slate-400">timeline frame</span>
+          <span>{{ timelineFrame }}</span>
+        </div>
+        <div class="flex justify-between mb-1">
+          <span class="text-slate-400">timeline time</span>
+          <span>{{ timelineSeconds.toFixed(3) }} s</span>
+        </div>
+        <div class="flex justify-between mb-1">
+          <span class="text-slate-400">slot phase</span>
+          <span>{{ slotPhase }}</span>
+        </div>
+        <div class="flex justify-between mb-1">
+          <span class="text-slate-400">transport phase</span>
+          <span>{{ transportPhase }}</span>
+        </div>
+        <div class="flex justify-between mb-1">
+          <span class="text-slate-400">source cursor</span>
+          <span>{{ sourceFrameCursor }}</span>
+        </div>
+        <div class="flex justify-between mb-1">
+          <span class="text-slate-400">playback rate</span>
+          <span>{{ playbackRate.toFixed(3) }}</span>
+        </div>
+        <div class="flex justify-between mb-1">
+          <span class="text-slate-400">input / output frames</span>
+          <span
+            >{{ inputFramesThisBlock }} / {{ outputFramesThisBlock }}</span
+          >
+        </div>
+        <div class="flex justify-between mb-1">
+          <span class="text-slate-400">drain remaining</span>
+          <span>{{ endingDrainFramesRemaining }}</span>
+        </div>
+        <div class="flex justify-between mb-1">
+          <span class="text-slate-400">flush remaining</span>
+          <span>{{ endingFlushFramesRemaining }}</span>
+        </div>
+        <div class="flex justify-between mb-1">
+          <span class="text-slate-400">zero-backed</span>
+          <span>{{ isZeroBackedInput ? "yes" : "no" }}</span>
+        </div>
+        <div class="flex justify-between mb-1">
+          <span class="text-slate-400">engine</span>
+          <span>{{ activeEngineKind }}{{ nextEngineKind ? ` → ${nextEngineKind}` : "" }}</span>
+        </div>
+        <div class="flex justify-between mb-1">
+          <span class="text-slate-400">mix progress</span>
+          <span>{{ (mixProgress * 100).toFixed(2) }}%</span>
+        </div>
+        <div class="flex justify-between">
+          <span class="text-slate-400">last block RMS</span>
+          <span>{{ lastBlockRms.toFixed(5) }}</span>
+        </div>
+      </section>
   </main>
 </template>

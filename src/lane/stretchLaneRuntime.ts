@@ -14,9 +14,21 @@ import {
 } from "../transport/sourceAssetReader";
 import { createTransportState } from "../transport/transportState";
 import { createInputDebtAccumulator } from "../transport/inputDebtAccumulator";
+import { createPreRollPlanner } from "../transport/preRollPlanner";
 import {
-  createPreRollPlanner,
-} from "../transport/preRollPlanner";
+  invariantCanonicalCapacity,
+  invariantFlushDoesNotConsumeInput,
+  invariantInputDebtFinite,
+  invariantPausedIdleNoCursorAdvance,
+  invariantPhaseTransition,
+  invariantPreRollCapacity,
+  invariantSourceCursorNonNegative,
+  clearLastViolations,
+} from "../transport/transportInvariants";
+import {
+  buildTransportTelemetry,
+  type TransportTelemetrySnapshot,
+} from "../transport/transportTelemetry";
 
 export interface StretchLaneRuntimeOptions {
   /**
@@ -50,6 +62,11 @@ export interface StretchLaneRuntime {
    * Current transport phase (idle, running, drainingInput, flushingTail, etc.).
    */
   readonly transportPhase: string;
+
+  /**
+   * Snapshot of combined transport + engine telemetry for the current block.
+   */
+  getTelemetrySnapshot(): TransportTelemetrySnapshot;
 
   /**
    * Drive one audio block through:
@@ -165,6 +182,7 @@ export function createStretchLaneRuntime(
     transport.endingDrainFramesRemaining = 0;
     transport.endingFlushFramesRemaining = 0;
     composite.resetTransport(transport.playbackRate);
+    clearLastViolations();
   }
 
   function play(): void {
@@ -203,6 +221,11 @@ export function createStretchLaneRuntime(
     const preRollFrames = plan.preRollFrames;
 
     ensurePreRollCapacity(preRollFrames);
+    invariantPreRollCapacity(
+      transport,
+      preRollBuffer[0]?.length ?? 0,
+      preRollFrames,
+    );
 
     // Read pre-roll source window. Zero-padded near file start.
     const preRollCursor = Math.max(0, targetFrame - preRollFrames);
@@ -215,13 +238,21 @@ export function createStretchLaneRuntime(
     composite.preRollAll(preRollBuffer, preRollFrames, transport.playbackRate);
 
     transport.sourceFrameCursor = targetFrame;
+    invariantSourceCursorNonNegative(transport);
     transport.inputDebtFrames = 0;
     debtAccumulator.reset();
     transport.phase = "running";
     transport.pendingSeekFrame = null;
   }
 
+  // Mutable telemetry accumulator for the current block.
+  let telemetryInputFramesThisBlock = 0;
+  let telemetryOutputFramesThisBlock = 0;
+  let telemetryIsZeroBackedInput = false;
+
   function processBlock(outputFrames: number): void {
+    const previousPhase = transport.phase;
+
     // Apply pending pause immediately, but never abort an ending tail.
     if (
       transport.pendingPause &&
@@ -255,17 +286,34 @@ export function createStretchLaneRuntime(
       performPreRoll();
     }
 
+    invariantPhaseTransition(previousPhase, transport.phase, transport);
+
+    // Reset per-block telemetry accumulators.
+    telemetryInputFramesThisBlock = 0;
+    telemetryOutputFramesThisBlock = 0;
+    telemetryIsZeroBackedInput = false;
+
     // Drive the lane / composite with phase-dispatching per-segment callback.
     lane.processBlock(outputFrames, {
       renderWithDecision: (segmentOutputFrames, decision) => {
+        const segmentPreviousPhase = transport.phase;
+        telemetryOutputFramesThisBlock += segmentOutputFrames;
+
         switch (transport.phase) {
           case "running": {
+            const cursorBefore = transport.sourceFrameCursor;
             const inputFrames = debtAccumulator.accumulate(
               segmentOutputFrames,
               transport.playbackRate,
             );
+            invariantInputDebtFinite(transport);
 
             ensureCanonicalInputCapacity(inputFrames);
+            invariantCanonicalCapacity(
+              transport,
+              canonicalInput[0]?.length ?? 0,
+              inputFrames,
+            );
 
             reader.readSegment(
               canonicalInput,
@@ -274,6 +322,15 @@ export function createStretchLaneRuntime(
             );
 
             transport.sourceFrameCursor += inputFrames;
+            invariantSourceCursorNonNegative(transport);
+            invariantPausedIdleNoCursorAdvance(
+              transport,
+              cursorBefore,
+              transport.sourceFrameCursor,
+            );
+
+            telemetryInputFramesThisBlock += inputFrames;
+            telemetryIsZeroBackedInput = false;
 
             composite.renderSegment(
               segmentOutputFrames,
@@ -299,8 +356,14 @@ export function createStretchLaneRuntime(
               segmentOutputFrames,
               transport.playbackRate,
             );
+            invariantInputDebtFinite(transport);
 
             ensureCanonicalInputCapacity(inputFrames);
+            invariantCanonicalCapacity(
+              transport,
+              canonicalInput[0]?.length ?? 0,
+              inputFrames,
+            );
 
             for (let c = 0; c < structural.channels; c += 1) {
               canonicalInput[c]?.fill(0, 0, inputFrames);
@@ -313,6 +376,9 @@ export function createStretchLaneRuntime(
               inputFrames,
             );
 
+            telemetryInputFramesThisBlock += inputFrames;
+            telemetryIsZeroBackedInput = true;
+
             transport.endingDrainFramesRemaining -= inputFrames;
             if (transport.endingDrainFramesRemaining <= 0) {
               transport.phase = "flushingTail";
@@ -323,6 +389,7 @@ export function createStretchLaneRuntime(
           }
 
           case "flushingTail": {
+            invariantFlushDoesNotConsumeInput(transport, 0);
             composite.flushSegment(segmentOutputFrames, decision);
 
             transport.endingFlushFramesRemaining -= segmentOutputFrames;
@@ -338,12 +405,35 @@ export function createStretchLaneRuntime(
           case "idle":
           case "paused":
           case "priming":
-          default:
+          default: {
+            invariantPausedIdleNoCursorAdvance(
+              transport,
+              transport.sourceFrameCursor,
+              transport.sourceFrameCursor,
+            );
             composite.pushSilence(segmentOutputFrames);
             break;
+          }
         }
+
+        invariantPhaseTransition(
+          segmentPreviousPhase,
+          transport.phase,
+          transport,
+        );
       },
     });
+  }
+
+  function getTelemetrySnapshot(): TransportTelemetrySnapshot {
+    const laneTelemetry = composite.getTelemetrySnapshot();
+    return buildTransportTelemetry(
+      transport,
+      laneTelemetry,
+      telemetryInputFramesThisBlock,
+      telemetryOutputFramesThisBlock,
+      telemetryIsZeroBackedInput,
+    );
   }
 
   async function reconfigureStructurally(
@@ -364,6 +454,7 @@ export function createStretchLaneRuntime(
     get transportPhase() {
       return transport.phase;
     },
+    getTelemetrySnapshot,
     processBlock,
     updateParams,
     loadAsset,

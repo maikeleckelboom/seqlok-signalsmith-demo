@@ -133,3 +133,55 @@ eventually be replaced by published versions of `@seqlok/*` from npm.
 
 See `THIRD_PARTY_NOTICES.md` and `third_party/licenses/*` for Signalsmith licensing.
 The Seqlok packages under `packages/` are MIT-licensed (see individual `UPSTREAM.md`).
+
+---
+
+## Validation & debug guidance
+
+### Telemetry to watch
+
+The demo UI exposes a telemetry panel fed directly from the worklet every audio block. Watch these fields while debugging transport behavior:
+
+- **transport phase** — the runtime-owned lifecycle (`idle`, `priming`, `running`, `drainingInput`, `flushingTail`, `paused`). This should never jump illegally (e.g. `idle` → `running` directly).
+- **source cursor** — monotonically increases during `running` and `drainingInput`, freezes during `paused`/`idle`, and resets on seek.
+- **input / output frames** — input frames per block should track `outputFrames * playbackRate` on average. During `drainingInput` and `flushingTail`, input is zero-backed.
+- **drain remaining / flush remaining** — countdown timers that should reach exactly `0` before the phase transitions to `idle`.
+- **zero-backed** — `yes` during `drainingInput` and `flushingTail`, confirming the engine receives silence rather than new source frames.
+- **engine** — shows the active engine kind and the next engine kind during hotswap prewarm/crossfade.
+
+### Manual validation scenarios
+
+1. **Play → natural EOF**
+   - Load a short file, press Play.
+   - Watch the transport phase: `priming` → `running` → `drainingInput` → `flushingTail` → `idle`.
+   - Audio should not cut off abruptly; the tail should fade naturally.
+
+2. **Seek while running**
+   - During playback, move the seek slider.
+   - Transport should return to `priming`, then `running` from the new cursor.
+   - The source cursor should jump to the seek target immediately after priming.
+
+3. **Pause / resume**
+   - Press Pause during playback: phase should become `paused`, source cursor must freeze.
+   - Press Play: phase should go `priming` → `running`.
+
+4. **Hotswap during playback**
+   - Press "Schedule structural swap" while running.
+   - `mix progress` should ramp from `0%` to `100%` over ~1 second.
+   - The transport phase should stay `running` throughout; no idle gaps.
+
+### Correct EOF behavior
+
+When the source cursor reaches the asset length:
+- **drainingInput** begins immediately. The engine continues receiving silence-backed input for `inputLatency` frames so analysis windows empty naturally.
+- **flushingTail** begins when drain reaches `0`. The engine synthesizes its remaining output tail via `_flush()`.
+- **idle** begins when flush reaches `0`. No source cursor movement happens in `flushingTail`.
+
+### Correct seek behavior
+
+When a seek is requested:
+- The current phase (even `drainingInput` or `flushingTail`) is aborted and reset to `priming`.
+- A pre-roll window is read starting at `max(0, targetFrame - preRollFrames)`.
+- Both engines are reset and pre-rolled with the same source window.
+- The source cursor is set exactly to `targetFrame`.
+- Playback resumes from `running`.

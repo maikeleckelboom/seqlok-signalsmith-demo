@@ -28,6 +28,8 @@ export interface StretchLaneOptions {
 export interface StretchLaneTelemetrySnapshot {
   readonly phase: string;
   readonly mixTo: number;
+  readonly activeEngineKind: string;
+  readonly nextEngineKind: string | null;
 }
 
 function clamp01(x: number): number {
@@ -124,6 +126,7 @@ export class StretchLaneComposite {
 
   private telemetryPhase: string = "idle";
   private telemetryMixTo = 0;
+  private telemetryNextKind: EngineKindType | null = null;
 
   private lastQuantumFrames = 128;
   private currentActiveKind: EngineKindType = EngineKind.A;
@@ -186,7 +189,13 @@ export class StretchLaneComposite {
   }
 
   getTelemetrySnapshot(): StretchLaneTelemetrySnapshot {
-    return { phase: this.telemetryPhase, mixTo: this.telemetryMixTo };
+    return {
+      phase: this.telemetryPhase,
+      mixTo: this.telemetryMixTo,
+      activeEngineKind: String(this.currentActiveKind),
+      nextEngineKind:
+        this.telemetryNextKind !== null ? String(this.telemetryNextKind) : null,
+    };
   }
 
   getMaxLatencyFrames(): number {
@@ -344,6 +353,7 @@ export class StretchLaneComposite {
   private updateTelemetry(decision: SwapStepDecisionRT<EngineKindType>): void {
     this.telemetryPhase = decision.status.phase;
     this.currentActiveKind = decision.status.activeEngineKind;
+    this.telemetryNextKind = decision.status.nextEngineKind;
 
     if (
       decision.status.phase === "crossfade" &&

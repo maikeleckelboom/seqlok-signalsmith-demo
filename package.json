@@ -15,7 +15,9 @@
     "build:wasm": "tsx scripts/build.ts",
     "dev:shim": "cross-env DEV_SHIM=1 tsx scripts/build.ts && vite",
     "build:shim": "cross-env DEV_SHIM=1 tsx scripts/build.ts && vue-tsc -b && vite build",
-    "build:all": "pnpm run vendor && pnpm run build"
+    "build:all": "pnpm run vendor && pnpm run build",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@seqlok/commands": "workspace:*",
@@ -36,6 +38,7 @@
     "tsx": "^4.21.0",
     "typescript": "~5.9.3",
     "vite": "^8.0.11",
+    "vitest": "^3.0.0",
     "vue-tsc": "^3.1.4"
   },
   "pnpm": {

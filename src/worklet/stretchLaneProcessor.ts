@@ -24,6 +24,15 @@ interface TelemetryMessage {
   readonly mixTo: number;
   readonly blockRms: number;
   readonly transportPhase: string;
+  readonly sourceFrameCursor: number;
+  readonly playbackRate: number;
+  readonly inputFramesThisBlock: number;
+  readonly outputFramesThisBlock: number;
+  readonly endingDrainFramesRemaining: number;
+  readonly endingFlushFramesRemaining: number;
+  readonly isZeroBackedInput: boolean;
+  readonly activeEngineKind: string;
+  readonly nextEngineKind: string | null;
 }
 
 type OutboundMessage = TelemetryMessage;
@@ -265,6 +274,7 @@ class StretchLaneProcessor extends AudioWorkletProcessor {
     const blockRms = count > 0 ? Math.sqrt(sumSq / count) : 0;
 
     const transportPhase = runtime.transportPhase;
+    const transportSnapshot = runtime.getTelemetrySnapshot();
 
     const msg: TelemetryMessage = {
       type: "telemetry",
@@ -273,6 +283,15 @@ class StretchLaneProcessor extends AudioWorkletProcessor {
       mixTo,
       blockRms,
       transportPhase,
+      sourceFrameCursor: transportSnapshot.sourceFrameCursor,
+      playbackRate: transportSnapshot.playbackRate,
+      inputFramesThisBlock: transportSnapshot.inputFramesThisBlock,
+      outputFramesThisBlock: transportSnapshot.outputFramesThisBlock,
+      endingDrainFramesRemaining: transportSnapshot.endingDrainFramesRemaining,
+      endingFlushFramesRemaining: transportSnapshot.endingFlushFramesRemaining,
+      isZeroBackedInput: transportSnapshot.isZeroBackedInput,
+      activeEngineKind: transportSnapshot.activeEngineKind,
+      nextEngineKind: transportSnapshot.nextEngineKind,
     };
 
     this.port.postMessage(msg as OutboundMessage);
