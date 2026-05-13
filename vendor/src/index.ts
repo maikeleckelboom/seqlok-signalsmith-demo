@@ -2,7 +2,6 @@ import createModuleFactory, {
   type SignalsmithStretchModule,
 } from "../dist/emscripten/module";
 
-// Re-export types for the rest of the app.
 export type {
   SignalsmithStretchModule,
   CBool,

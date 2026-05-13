@@ -33,6 +33,8 @@ interface TelemetryMessage {
   readonly isZeroBackedInput: boolean;
   readonly activeEngineKind: string;
   readonly nextEngineKind: string | null;
+  readonly enginesReady: boolean;
+  readonly engineInitError: string | null;
 }
 
 type OutboundMessage = TelemetryMessage;
@@ -292,6 +294,8 @@ class StretchLaneProcessor extends AudioWorkletProcessor {
       isZeroBackedInput: transportSnapshot.isZeroBackedInput,
       activeEngineKind: transportSnapshot.activeEngineKind,
       nextEngineKind: transportSnapshot.nextEngineKind,
+      enginesReady: runtime.enginesReady,
+      engineInitError: runtime.engineInitError,
     };
 
     this.port.postMessage(msg as OutboundMessage);

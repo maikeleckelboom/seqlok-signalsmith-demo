@@ -59,6 +59,16 @@ export interface StretchLaneRuntime {
   readonly composite: StretchLaneComposite;
 
   /**
+   * Whether the initial A/B engines have finished spawning.
+   */
+  readonly enginesReady: boolean;
+
+  /**
+   * If initial engine spawn failed, this carries the error message.
+   */
+  readonly engineInitError: string | null;
+
+  /**
    * Current transport phase (idle, running, drainingInput, flushingTail, etc.).
    */
   readonly transportPhase: string;
@@ -453,6 +463,12 @@ export function createStretchLaneRuntime(
     composite,
     get transportPhase() {
       return transport.phase;
+    },
+    get enginesReady() {
+      return composite.enginesReady;
+    },
+    get engineInitError() {
+      return composite.engineInitError;
     },
     getTelemetrySnapshot,
     processBlock,

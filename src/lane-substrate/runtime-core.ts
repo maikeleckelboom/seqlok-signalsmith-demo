@@ -4,9 +4,13 @@ import {
   HOTSWAP_COMMAND_TAG_INSTALL,
   HOTSWAP_COMMAND_WORDS_PER_SLOT,
   type HotswapCommand,
+} from "./hotswap-command";
+import {
   type HotswapSchedulerConfig,
+} from "./hotswap-scheduler";
+import {
   type SwapTicketRT,
-} from "@seqlok/hotswap";
+} from "./hotswap-protocol";
 
 import {
   createHotswapSlotDriver,

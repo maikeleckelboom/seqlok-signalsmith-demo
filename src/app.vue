@@ -1,12 +1,9 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from "vue";
-import { StretchLaneNode } from "./lane/stretch-lane-node.ts";
+import {computed, onBeforeUnmount, ref, watch} from "vue";
+import {StretchLaneNode} from "./lane/stretch-lane-node.ts";
 import stretchWorkletUrl from "./worklet/stretch-lane-processor.ts?url";
-import type {
-  StretchParams,
-  StretchStructuralConfig,
-} from "./engine/stretch-config";
-import { buildSharedPcmAsset } from "./transport/build-shared-pcm-asset.ts";
+import type {StretchParams, StretchStructuralConfig,} from "./engine/stretch-config";
+import {buildSharedPcmAsset} from "./transport/build-shared-pcm-asset.ts";
 
 // ----------------------
 // Static config
@@ -44,6 +41,8 @@ const isWorkletReady = ref(false);
 const isNodeReady = ref(false);
 const isPlaying = ref(false);
 const hasFile = ref(false);
+const enginesReady = ref(false);
+const engineInitError = ref<string | null>(null);
 
 // File info
 const fileName = ref<string | null>(null);
@@ -57,21 +56,21 @@ const pitchSemitones = ref(baseParams.pitchSemitones);
 const seekPosition = ref(0); // 0..1 across the whole track
 const currentPreset = ref<"default" | "cheaper">(structuralBase.preset);
 
-  // Telemetry from worklet
-  const timelineFrame = ref(0);
-  const slotPhase = ref<string>("idle");
-  const transportPhase = ref<string>("idle");
-  const mixProgress = ref(0);
-  const lastBlockRms = ref(0);
-  const sourceFrameCursor = ref(0);
-  const playbackRate = ref(1);
-  const inputFramesThisBlock = ref(0);
-  const outputFramesThisBlock = ref(0);
-  const endingDrainFramesRemaining = ref(0);
-  const endingFlushFramesRemaining = ref(0);
-  const isZeroBackedInput = ref(false);
-  const activeEngineKind = ref<string>("none");
-  const nextEngineKind = ref<string | null>(null);
+// Telemetry from worklet
+const timelineFrame = ref(0);
+const slotPhase = ref<string>("idle");
+const transportPhase = ref<string>("idle");
+const mixProgress = ref(0);
+const lastBlockRms = ref(0);
+const sourceFrameCursor = ref(0);
+const playbackRate = ref(1);
+const inputFramesThisBlock = ref(0);
+const outputFramesThisBlock = ref(0);
+const endingDrainFramesRemaining = ref(0);
+const endingFlushFramesRemaining = ref(0);
+const isZeroBackedInput = ref(false);
+const activeEngineKind = ref<string>("none");
+const nextEngineKind = ref<string | null>(null);
 
 // Derived value
 const timelineSeconds = computed(() => {
@@ -148,6 +147,8 @@ function attachTelemetry(node: StretchLaneNode): void {
     readonly isZeroBackedInput: boolean;
     readonly activeEngineKind: string;
     readonly nextEngineKind: string | null;
+    readonly enginesReady: boolean;
+    readonly engineInitError: string | null;
   }
 
   node.port.onmessage = (event: MessageEvent<TelemetryMessage>): void => {
@@ -169,6 +170,8 @@ function attachTelemetry(node: StretchLaneNode): void {
     isZeroBackedInput.value = msg.isZeroBackedInput;
     activeEngineKind.value = msg.activeEngineKind;
     nextEngineKind.value = msg.nextEngineKind;
+    enginesReady.value = msg.enginesReady;
+    engineInitError.value = msg.engineInitError;
   };
 }
 
@@ -269,19 +272,19 @@ async function triggerSwap(): Promise<void> {
   }
 
   const nextPreset: "default" | "cheaper" =
-    currentPreset.value === "default" ? "cheaper" : "default";
+      currentPreset.value === "default" ? "cheaper" : "default";
 
   const fadeFrames = ctx.sampleRate; // ~1 second
   const prewarmLeadInFrames = structuralBase.blockSamples * 8;
 
   node.scheduleSwap(
-    {
-      ...structuralBase,
-      sampleRate: ctx.sampleRate,
-      preset: nextPreset,
-    },
-    fadeFrames,
-    prewarmLeadInFrames,
+      {
+        ...structuralBase,
+        sampleRate: ctx.sampleRate,
+        preset: nextPreset,
+      },
+      fadeFrames,
+      prewarmLeadInFrames,
   );
 
   currentPreset.value = nextPreset;
@@ -308,7 +311,7 @@ onBeforeUnmount(() => {
 
 <template>
   <main
-    class="min-h-screen bg-slate-950 text-slate-100 flex flex-col items-center justify-center gap-8"
+      class="min-h-screen bg-slate-950 text-slate-100 flex flex-col items-center justify-center gap-8"
   >
     <section class="space-y-4 w-full max-w-xl">
       <h1 class="text-2xl font-semibold tracking-tight">
@@ -325,14 +328,14 @@ onBeforeUnmount(() => {
       <!-- File input -->
       <div class="flex flex-wrap items-center gap-3">
         <label
-          class="px-4 py-2 rounded-lg bg-slate-700 text-sm font-medium cursor-pointer"
+            class="px-4 py-2 rounded-lg bg-slate-700 text-sm font-medium cursor-pointer"
         >
           <span>Select audio file</span>
           <input
-            type="file"
-            accept="audio/*"
-            class="hidden"
-            @change="handleFileChange"
+              type="file"
+              accept="audio/*"
+              class="hidden"
+              @change="handleFileChange"
           />
         </label>
 
@@ -350,28 +353,28 @@ onBeforeUnmount(() => {
       <!-- Transport + hotswap controls -->
       <div class="flex flex-wrap items-center gap-3">
         <button
-          type="button"
-          class="px-4 py-2 rounded-lg bg-emerald-500/90 text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed"
-          :disabled="!hasFile || isPlaying"
-          @click="play"
+            type="button"
+            class="px-4 py-2 rounded-lg bg-emerald-500/90 text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed"
+            :disabled="!hasFile || isPlaying || !enginesReady"
+            @click="play"
         >
           Play via stretch lane
         </button>
 
         <button
-          type="button"
-          class="px-4 py-2 rounded-lg bg-slate-700 text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed"
-          :disabled="!isPlaying"
-          @click="pause"
+            type="button"
+            class="px-4 py-2 rounded-lg bg-slate-700 text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed"
+            :disabled="!isPlaying"
+            @click="pause"
         >
           Pause
         </button>
 
         <button
-          type="button"
-          class="px-4 py-2 rounded-lg bg-sky-500/90 text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed"
-          :disabled="!isNodeReady"
-          @click="triggerSwap"
+            type="button"
+            class="px-4 py-2 rounded-lg bg-sky-500/90 text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed"
+            :disabled="!isNodeReady"
+            @click="triggerSwap"
         >
           Schedule structural swap
           <span class="ml-1 text-xs uppercase tracking-wide">
@@ -385,14 +388,14 @@ onBeforeUnmount(() => {
         <label class="text-xs text-slate-300 flex items-center gap-2">
           Seek
           <input
-            v-model.number="seekPosition"
-            type="range"
-            min="0"
-            max="1"
-            step="0.001"
-            class="w-40 accent-sky-400"
-            :disabled="!hasFile"
-            @change="applySeek"
+              v-model.number="seekPosition"
+              type="range"
+              min="0"
+              max="1"
+              step="0.001"
+              class="w-40 accent-sky-400"
+              :disabled="!hasFile"
+              @change="applySeek"
           />
           <span class="tabular-nums">
             {{ (seekPosition * fileDuration).toFixed(1) }}s /
@@ -407,12 +410,12 @@ onBeforeUnmount(() => {
           <label class="text-xs text-slate-300 flex items-center gap-2">
             Time-stretch
             <input
-              v-model.number="speedFactor"
-              type="range"
-              min="0.5"
-              max="2"
-              step="0.01"
-              class="w-40 accent-emerald-400"
+                v-model.number="speedFactor"
+                type="range"
+                min="0.5"
+                max="2"
+                step="0.01"
+                class="w-40 accent-emerald-400"
             />
             <span class="tabular-ums"> {{ speedFactor.toFixed(2) }}× </span>
           </label>
@@ -422,12 +425,12 @@ onBeforeUnmount(() => {
           <label class="text-xs text-slate-300 flex items-center gap-2">
             Pitch
             <input
-              v-model.number="pitchSemitones"
-              type="range"
-              min="-12"
-              max="12"
-              step="0.1"
-              class="w-40 accent-violet-400"
+                v-model.number="pitchSemitones"
+                type="range"
+                min="-12"
+                max="12"
+                step="0.1"
+                class="w-40 accent-violet-400"
             />
             <span class="tabular-nums">
               {{ pitchSemitones.toFixed(1) }} st
@@ -441,17 +444,19 @@ onBeforeUnmount(() => {
         <span>ctx: {{ isContextReady ? "ready" : "not ready" }}</span>
         <span>worklet: {{ isWorkletReady ? "loaded" : "not loaded" }}</span>
         <span>node: {{ isNodeReady ? "ready" : "not ready" }}</span>
+        <span>engines: {{ enginesReady ? "ready" : "not ready" }}</span>
+        <span v-if="engineInitError !== null" class="text-red-400">engine error: {{ engineInitError }}</span>
         <span>playing: {{ isPlaying ? "yes" : "no" }}</span>
       </div>
     </section>
 
-      <!-- Transport lifecycle -->
-      <div class="flex flex-wrap gap-2">
+    <!-- Transport lifecycle -->
+    <div class="flex flex-wrap gap-2">
         <span
-          v-for="phase in ['idle','priming','running','drainingInput','flushingTail','paused']"
-          :key="phase"
-          class="px-2 py-1 rounded text-[11px] font-medium border"
-          :class="
+            v-for="phase in ['idle','priming','running','drainingInput','flushingTail','paused']"
+            :key="phase"
+            class="px-2 py-1 rounded text-[11px] font-medium border"
+            :class="
             transportPhase === phase
               ? phase === 'running'
                 ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300'
@@ -465,66 +470,66 @@ onBeforeUnmount(() => {
         >
           {{ phase }}
         </span>
-      </div>
+    </div>
 
-      <!-- Telemetry -->
-      <section
+    <!-- Telemetry -->
+    <section
         class="w-full max-w-xl rounded-xl border border-slate-800 bg-slate-900/60 px-4 py-3 text-xs font-mono"
-      >
-        <div class="flex justify-between mb-1">
-          <span class="text-slate-400">timeline frame</span>
-          <span>{{ timelineFrame }}</span>
-        </div>
-        <div class="flex justify-between mb-1">
-          <span class="text-slate-400">timeline time</span>
-          <span>{{ timelineSeconds.toFixed(3) }} s</span>
-        </div>
-        <div class="flex justify-between mb-1">
-          <span class="text-slate-400">slot phase</span>
-          <span>{{ slotPhase }}</span>
-        </div>
-        <div class="flex justify-between mb-1">
-          <span class="text-slate-400">transport phase</span>
-          <span>{{ transportPhase }}</span>
-        </div>
-        <div class="flex justify-between mb-1">
-          <span class="text-slate-400">source cursor</span>
-          <span>{{ sourceFrameCursor }}</span>
-        </div>
-        <div class="flex justify-between mb-1">
-          <span class="text-slate-400">playback rate</span>
-          <span>{{ playbackRate.toFixed(3) }}</span>
-        </div>
-        <div class="flex justify-between mb-1">
-          <span class="text-slate-400">input / output frames</span>
-          <span
-            >{{ inputFramesThisBlock }} / {{ outputFramesThisBlock }}</span
-          >
-        </div>
-        <div class="flex justify-between mb-1">
-          <span class="text-slate-400">drain remaining</span>
-          <span>{{ endingDrainFramesRemaining }}</span>
-        </div>
-        <div class="flex justify-between mb-1">
-          <span class="text-slate-400">flush remaining</span>
-          <span>{{ endingFlushFramesRemaining }}</span>
-        </div>
-        <div class="flex justify-between mb-1">
-          <span class="text-slate-400">zero-backed</span>
-          <span>{{ isZeroBackedInput ? "yes" : "no" }}</span>
-        </div>
-        <div class="flex justify-between mb-1">
-          <span class="text-slate-400">engine</span>
-          <span>{{ activeEngineKind }}{{ nextEngineKind ? ` → ${nextEngineKind}` : "" }}</span>
-        </div>
-        <div class="flex justify-between mb-1">
-          <span class="text-slate-400">mix progress</span>
-          <span>{{ (mixProgress * 100).toFixed(2) }}%</span>
-        </div>
-        <div class="flex justify-between">
-          <span class="text-slate-400">last block RMS</span>
-          <span>{{ lastBlockRms.toFixed(5) }}</span>
-        </div>
-      </section>
+    >
+      <div class="flex justify-between mb-1">
+        <span class="text-slate-400">timeline frame</span>
+        <span>{{ timelineFrame }}</span>
+      </div>
+      <div class="flex justify-between mb-1">
+        <span class="text-slate-400">timeline time</span>
+        <span>{{ timelineSeconds.toFixed(3) }} s</span>
+      </div>
+      <div class="flex justify-between mb-1">
+        <span class="text-slate-400">slot phase</span>
+        <span>{{ slotPhase }}</span>
+      </div>
+      <div class="flex justify-between mb-1">
+        <span class="text-slate-400">transport phase</span>
+        <span>{{ transportPhase }}</span>
+      </div>
+      <div class="flex justify-between mb-1">
+        <span class="text-slate-400">source cursor</span>
+        <span>{{ sourceFrameCursor }}</span>
+      </div>
+      <div class="flex justify-between mb-1">
+        <span class="text-slate-400">playback rate</span>
+        <span>{{ playbackRate.toFixed(3) }}</span>
+      </div>
+      <div class="flex justify-between mb-1">
+        <span class="text-slate-400">input / output frames</span>
+        <span
+        >{{ inputFramesThisBlock }} / {{ outputFramesThisBlock }}</span
+        >
+      </div>
+      <div class="flex justify-between mb-1">
+        <span class="text-slate-400">drain remaining</span>
+        <span>{{ endingDrainFramesRemaining }}</span>
+      </div>
+      <div class="flex justify-between mb-1">
+        <span class="text-slate-400">flush remaining</span>
+        <span>{{ endingFlushFramesRemaining }}</span>
+      </div>
+      <div class="flex justify-between mb-1">
+        <span class="text-slate-400">zero-backed</span>
+        <span>{{ isZeroBackedInput ? "yes" : "no" }}</span>
+      </div>
+      <div class="flex justify-between mb-1">
+        <span class="text-slate-400">engine</span>
+        <span>{{ activeEngineKind }}{{ nextEngineKind ? ` → ${nextEngineKind}` : "" }}</span>
+      </div>
+      <div class="flex justify-between mb-1">
+        <span class="text-slate-400">mix progress</span>
+        <span>{{ (mixProgress * 100).toFixed(2) }}%</span>
+      </div>
+      <div class="flex justify-between">
+        <span class="text-slate-400">last block RMS</span>
+        <span>{{ lastBlockRms.toFixed(5) }}</span>
+      </div>
+    </section>
   </main>
 </template>

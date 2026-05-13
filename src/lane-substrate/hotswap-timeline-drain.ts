@@ -1,6 +1,6 @@
 import type { CommandConsumer } from "@seqlok/commands";
-import type { HotswapCommand } from "@seqlok/hotswap";
 
+import type { HotswapCommand } from "./hotswap-command";
 import type { TimelineCommand, TimelineDriver } from "./timeline-driver";
 
 export interface HotswapDrainContext<K extends number> {

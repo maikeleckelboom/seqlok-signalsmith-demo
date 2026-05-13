@@ -7,10 +7,10 @@ import type { StretchParams, StretchStructuralConfig } from "./stretch-config";
 
 import {
   createTicketId,
-  scheduleSwap,
   type SwapStepDecisionRT,
   type SwapTicketRT,
-} from "@seqlok/hotswap";
+} from "../lane-substrate/hotswap-protocol";
+import { scheduleSwap } from "../lane-substrate/hotswap-scheduler";
 
 import { type StretchEngine, StretchEngineInstance } from "./stretch-engine";
 
@@ -131,6 +131,10 @@ export class StretchLaneComposite {
   private lastQuantumFrames = 128;
   private currentActiveKind: EngineKindType = EngineKind.A;
 
+  private initialEnginesReady = false;
+  private initialEngineError: string | null = null;
+  private readonly initialEnginesReadyPromise: Promise<void>;
+
   constructor(options: StretchLaneOptions) {
     const {
       lane,
@@ -185,7 +189,17 @@ export class StretchLaneComposite {
     this.delayA = delayA;
     this.delayB = delayB;
 
-    void this.spawnInitialEngines(structural);
+    this.initialEnginesReadyPromise = this.spawnInitialEngines(structural)
+      .then(() => {
+        this.initialEnginesReady = true;
+      })
+      .catch((err: unknown) => {
+        this.initialEngineError = err instanceof Error ? err.message : String(err);
+        console.error("Initial stretch engine spawn failed", err);
+      });
+
+    // Satisfy noUnusedLocals by reading the field.
+    void this.initialEnginesReadyPromise;
   }
 
   getTelemetrySnapshot(): StretchLaneTelemetrySnapshot {
@@ -196,6 +210,14 @@ export class StretchLaneComposite {
       nextEngineKind:
         this.telemetryNextKind !== null ? String(this.telemetryNextKind) : null,
     };
+  }
+
+  get enginesReady(): boolean {
+    return this.initialEnginesReady;
+  }
+
+  get engineInitError(): string | null {
+    return this.initialEngineError;
   }
 
   getMaxLatencyFrames(): number {

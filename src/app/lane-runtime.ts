@@ -1,12 +1,10 @@
 import type { CommandProducer, CommandConsumer } from "@seqlok/commands";
-import type {
-  HotswapCommand,
-  HotswapSchedulerConfig,
-  SwapStepDecisionRT,
-} from "@seqlok/hotswap";
 
 import { drainHotswapMailboxIntoTimeline } from "../lane-substrate/hotswap-timeline-drain";
 import type { HotswapSlotDriver } from "../lane-substrate/hotswap-slot-driver";
+import type { HotswapCommand } from "../lane-substrate/hotswap-command";
+import type { HotswapSchedulerConfig } from "../lane-substrate/hotswap-scheduler";
+import type { SwapStepDecisionRT } from "../lane-substrate/hotswap-protocol";
 import { createLaneRuntimeCore } from "../lane-substrate/runtime-core";
 import {
   processTimelineBlock,

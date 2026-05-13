@@ -285,6 +285,6 @@ async function build(): Promise<void> {
 
 void build().catch((err: unknown) => {
   // eslint-disable-next-line no-console
-  console.error("❌ build failed:", err instanceof Error ? err.message : err);
+  console.error("build failed:", err instanceof Error ? err.message : err);
   process.exit(1);
 });

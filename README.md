@@ -64,8 +64,6 @@ packages/               — Frozen local Seqlok workspace packages
   primitives/           —   @seqlok/primitives: SWSR rings, atomics, planes
   core/                 —   @seqlok/core: spec definitions, bindings, handoff
   commands/             —   @seqlok/commands: typed command transport
-  hotswap/              —   @seqlok/hotswap: engine lifecycle and swap protocol
-  integration/          —   @seqlok/integration: lane runtime, timeline, slot driver
 scripts/                — Build and vendor tooling
 ```
 
@@ -121,11 +119,15 @@ pnpm run build:shim
 
 ## What's in `packages/`
 
-The six `@seqlok/*` packages under `packages/` are **frozen snapshots** of the
+The local `@seqlok/*` packages under `packages/` are **frozen snapshots** of the
 Seqlok library at commit `db14ee0`. Each contains a `UPSTREAM.md` with provenance
 metadata. These packages exist so the demo is self-contained and does not require
 access to the private Seqlok repository or any global pnpm links. They will
 eventually be replaced by published versions of `@seqlok/*` from npm.
+
+The hotswap lane protocol and scheduler are intentionally owned by this demo in
+`src/lane-substrate/`; they describe the Signalsmith lane lifecycle rather than
+a reusable Seqlok package.
 
 ---
 

@@ -6,7 +6,7 @@
  * lane, etc.
  */
 
-import type { SwapTicketRT, TicketId } from "@seqlok/hotswap";
+import type { SwapTicketRT, TicketId } from "./hotswap-protocol";
 
 import type { HotswapSlotDriver } from "./hotswap-slot-driver";
 import {

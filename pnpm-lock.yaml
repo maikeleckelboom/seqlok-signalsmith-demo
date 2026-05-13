@@ -11,9 +11,6 @@ importers:
       '@seqlok/commands':
         specifier: workspace:*
         version: link:packages/commands
-      '@seqlok/hotswap':
-        specifier: workspace:*
-        version: link:packages/hotswap
       '@tailwindcss/vite':
         specifier: ^4.1.17
         version: 4.1.17(vite@8.0.11(@types/node@24.10.2)(esbuild@0.27.1)(jiti@2.6.1)(tsx@4.21.0))
@@ -77,33 +74,6 @@ importers:
       '@seqlok/base':
         specifier: workspace:*
         version: link:../base
-      '@seqlok/primitives':
-        specifier: workspace:*
-        version: link:../primitives
-
-  packages/hotswap:
-    dependencies:
-      '@seqlok/base':
-        specifier: workspace:*
-        version: link:../base
-      '@seqlok/commands':
-        specifier: workspace:*
-        version: link:../commands
-
-  packages/integration:
-    dependencies:
-      '@seqlok/base':
-        specifier: workspace:*
-        version: link:../base
-      '@seqlok/commands':
-        specifier: workspace:*
-        version: link:../commands
-      '@seqlok/core':
-        specifier: workspace:*
-        version: link:../core
-      '@seqlok/hotswap':
-        specifier: workspace:*
-        version: link:../hotswap
       '@seqlok/primitives':
         specifier: workspace:*
         version: link:../primitives

@@ -4,7 +4,7 @@ import {
   type SwapStateRT,
   type SwapStepDecisionRT,
   type SwapTicketRT,
-} from "@seqlok/hotswap";
+} from "./hotswap-protocol";
 
 export interface HotswapSlotDriver<EngineKind extends number> {
   readonly hasState: boolean;
